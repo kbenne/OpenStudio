@@ -217,7 +217,7 @@ void MainRightColumnController::setEditView(QWidget *widget)
         && oldwidget != m_measureEditController->editView.data())
     {
       LOG(Debug, "Deleting old edit widget: " << oldwidget);
-      delete oldwidget;
+      oldwidget->deleteLater();
     } else {
       boost::optional<model::ModelObject> nomodelobject;
       m_inspectorController->layoutModelObject(nomodelobject, false);
