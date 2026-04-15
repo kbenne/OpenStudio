@@ -74,7 +74,7 @@ namespace epmodel {
     };
 
     const ScheduleTypeSpec* findScheduleTypeSpec(const std::string& className, const std::string& scheduleDisplayName) {
-      static const std::array<ScheduleTypeSpec, 100> specs{{
+      static const std::array<ScheduleTypeSpec, 101> specs{{
         {"AirLoopHVAC", "Availability Manager Scheduled On", false, "Availability", 0.0, 1.0},
         {"AvailabilityManagerScheduledOn", "Availability Manager Scheduled On", false, "Availability", 0.0, 1.0},
         {"AvailabilityManagerScheduledOff", "Availability Manager Scheduled Off", false, "Availability", 0.0, 1.0},
@@ -137,6 +137,7 @@ namespace epmodel {
         {"WaterHeaterStratified", "Use Flow Rate Fraction", true, "Dimensionless", 0.0, 1.0},
         {"WaterHeaterStratified", "Cold Water Supply Temperature", true, "Temperature", boost::none, boost::none},
         {"WaterHeaterStratified", "Indirect Alternate Setpoint Temperature", true, "Temperature", boost::none, boost::none},
+        {"CentralHeatPumpSystem", "Ancillary Operation", false, "Availability", 0.0, 1.0},
         {"ChillerElectricEIR", "Basin Heater Operating", false, "Availability", 0.0, 1.0},
         {"ChillerElectricEIR", "Heat Recovery Inlet High Temperature Limit", true, "Temperature", boost::none, boost::none},
         {"ChillerElectricEIR", "Temperature Difference Across Condenser", true, "Temperature", boost::none, boost::none},
