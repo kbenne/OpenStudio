@@ -381,7 +381,8 @@ Current status, in brief:
 - `openstudio::model` parity work is substantial, with HVAC currently the most
   developed area.
 - Not every `OpenStudio.idd`-exclusive type has migrated yet. For that backlog,
-  see `doc/idd-schema-alignment/idd_mapping.md` under `## OS-only Types`.
+  see `doc/idd-schema-alignment/idd_mapping.generated.md` under
+  `## OS Types With No EP Output Evidence`.
 - The main remaining gaps are now less about basic type presence and more about
   depth of focused implementation effort, especially outside HVAC.
 
