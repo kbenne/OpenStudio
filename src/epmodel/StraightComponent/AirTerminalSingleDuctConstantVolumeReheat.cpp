@@ -28,10 +28,8 @@
 #include <utilities/core/Logger.hpp>
 #include <utilities/core/StringHelpers.hpp>
 #include <utilities/idd/AirTerminal_SingleDuct_ConstantVolume_Reheat_FieldEnums.hxx>
-#include <utilities/idd/ZoneHVAC_EquipmentList_FieldEnums.hxx>
-#include <utilities/idd/ZoneHVAC_EquipmentConnections_FieldEnums.hxx>
-#include <utilities/idf/WorkspaceExtensibleGroup.hpp>
 #include <utilities/idd/IddEnums.hxx>
+#include <utilities/idd/ZoneHVAC_EquipmentConnections_FieldEnums.hxx>
 
 namespace openstudio {
 namespace epmodel {
@@ -44,6 +42,38 @@ namespace epmodel {
       OS_ASSERT(terminal.setMinimumHotWaterorSteamFlowRate(0.0));
       OS_ASSERT(terminal.setConvergenceTolerance(0.001));
       OS_ASSERT(terminal.setMaximumReheatAirTemperature(35.0));
+    }
+
+    boost::optional<ThermalZone> owningThermalZoneForBranchNode(const Model& model, const Node& node) {
+      for (const auto& zone : model.getConcreteModelObjects<ThermalZone>()) {
+        if (zone.zoneAirNode() == node) {
+          return zone;
+        }
+      }
+      return boost::none;
+    }
+
+    bool registerTerminalWithThermalZone(const ModelObject& terminal, ThermalZone& thermalZone) {
+      auto zoneImpl = thermalZone.getImpl<detail::ThermalZone_Impl>();
+      OS_ASSERT(zoneImpl);
+
+      auto zoneConnections = zoneImpl->getZoneHVACEquipmentConnections();
+      auto equipmentList = zoneImpl->zoneHVACEquipmentList();
+      if (!equipmentList) {
+        ZoneHVACEquipmentList newEquipmentList(thermalZone.model());
+        if (!newEquipmentList.name()) {
+          newEquipmentList.createName();
+        }
+        if (!zoneConnections.setPointer(openstudio::ZoneHVAC_EquipmentConnectionsFields::ZoneConditioningEquipmentListName,
+                                        newEquipmentList.handle())) {
+          return false;
+        }
+        equipmentList = newEquipmentList;
+      }
+
+      auto equipmentListImpl = equipmentList->getImpl<detail::ZoneHVACEquipmentList_Impl>();
+      OS_ASSERT(equipmentListImpl);
+      return equipmentListImpl->addEquipment(terminal);
     }
 
   }  // namespace
@@ -274,48 +304,8 @@ namespace epmodel {
         adu->getImpl<openstudio::epmodel::detail::ZoneHVACAirDistributionUnit_Impl>()->setOutletNode(node);
       }
 
-      if (splitterBranchIndex < airLoop->thermalZones().size()) {
-        auto zone = airLoop->thermalZones()[splitterBranchIndex];
-        auto zoneImpl = zone.getImpl<openstudio::epmodel::detail::ThermalZone_Impl>();
-        OS_ASSERT(zoneImpl);
-
-        auto equipmentList = zoneImpl->zoneHVACEquipmentList();
-        if (!equipmentList) {
-          auto connections = zoneImpl->getZoneHVACEquipmentConnections();
-          ZoneHVACEquipmentList newEquipmentList(model());
-          if (!newEquipmentList.name()) {
-            newEquipmentList.createName();
-          }
-          if (!connections.setPointer(openstudio::ZoneHVAC_EquipmentConnectionsFields::ZoneConditioningEquipmentListName, newEquipmentList.handle())) {
-            return false;
-          }
-          equipmentList = newEquipmentList;
-        }
-
-        if (!equipmentList) {
-          LOG_FREE(Warn, "openstudio.epmodel.AirTerminalSingleDuctConstantVolumeReheat",
-                   "addToNode could not resolve a thermal-zone equipment list for branch index " << splitterBranchIndex << ".");
-          return false;
-        }
-
-        auto equipmentListImpl = equipmentList->getImpl<openstudio::epmodel::detail::ZoneHVACEquipmentList_Impl>();
-        OS_ASSERT(equipmentListImpl);
-        const auto currentEquipmentSize = equipmentListImpl->equipment().size();
-        auto group = equipmentList->pushExtensibleGroup().optionalCast<openstudio::WorkspaceExtensibleGroup>();
-        if (!group) {
-          return false;
-        }
-        if (!group->setPointer(openstudio::ZoneHVAC_EquipmentListExtensibleFields::ZoneEquipmentName, thisObject.handle(), false)) {
-          equipmentList->eraseExtensibleGroup(group->groupIndex());
-          return false;
-        }
-        const auto priority = static_cast<unsigned>(currentEquipmentSize + 1u);
-        if (!group->setUnsigned(openstudio::ZoneHVAC_EquipmentListExtensibleFields::ZoneEquipmentCoolingSequence, priority)) {
-          equipmentList->eraseExtensibleGroup(group->groupIndex());
-          return false;
-        }
-        if (!group->setUnsigned(openstudio::ZoneHVAC_EquipmentListExtensibleFields::ZoneEquipmentHeatingorNoLoadSequence, priority)) {
-          equipmentList->eraseExtensibleGroup(group->groupIndex());
+      if (auto thermalZone = owningThermalZoneForBranchNode(model(), node)) {
+        if (!registerTerminalWithThermalZone(thisObject, *thermalZone)) {
           return false;
         }
       }

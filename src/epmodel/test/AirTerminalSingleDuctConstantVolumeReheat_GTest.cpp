@@ -15,8 +15,8 @@
 #include "../Schedule/ScheduleCompact.hpp"
 #include "../Schedule/ScheduleConstant.hpp"
 #include "../Schedule/ScheduleConstant_Impl.hpp"
-#include "../StraightComponent/AirTerminalSingleDuctConstantVolumeNoReheat.hpp"
 #include "../StraightComponent/AirTerminalSingleDuctConstantVolumeReheat.hpp"
+#include "../StraightComponent/AirTerminalSingleDuctConstantVolumeNoReheat.hpp"
 #include "../StraightComponent/CoilHeatingGas.hpp"
 #include "../StraightComponent/CoilHeatingElectric.hpp"
 #include "../StraightComponent/FanConstantVolume.hpp"
@@ -25,8 +25,6 @@
 #include "../WaterToAirComponent/CoilHeatingWater.hpp"
 
 #include <utilities/idd/AirTerminal_SingleDuct_ConstantVolume_Reheat_FieldEnums.hxx>
-
-#include <algorithm>
 
 using namespace openstudio::epmodel;
 
@@ -210,33 +208,57 @@ TEST_F(EPModelFixture, AirTerminalSingleDuctConstantVolumeReheat_AddToNode_Resol
   ASSERT_TRUE(resolvedOutletNode);
   EXPECT_EQ(zoneAirNode, resolvedOutletNode.get());
 
-  const auto zoneEquipment = zone.equipment();
-  EXPECT_NE(std::ranges::find(zoneEquipment, terminal.cast<ModelObject>()), zoneEquipment.end());
+  const auto equipment = zone.equipment();
+  ASSERT_EQ(1u, equipment.size());
+  EXPECT_EQ(terminal.cast<ModelObject>(), equipment.front());
 }
 
-TEST_F(EPModelFixture, AirTerminalSingleDuctConstantVolumeReheat_AddToNode_UsesSecondZoneBranchAndAddsEquipmentToOwningZone) {
+TEST_F(EPModelFixture, AirTerminalSingleDuctConstantVolumeReheat_AddToNode_RegistersSecondBranchZoneEquipment) {
   Model model;
   AirLoopHVAC airLoop(model);
   ThermalZone zone1(model);
   ThermalZone zone2(model);
-  AirTerminalSingleDuctConstantVolumeNoReheat zone1Terminal(model);
-  AirTerminalSingleDuctConstantVolumeNoReheat zone2Terminal(model);
-  AirTerminalSingleDuctConstantVolumeReheat reheat(model);
+  AirTerminalSingleDuctConstantVolumeNoReheat dummyTerminal(model);
+  AirTerminalSingleDuctConstantVolumeReheat terminal(model);
+  ZoneHVACAirDistributionUnit adu(model);
 
-  ASSERT_TRUE(airLoop.addBranchForZone(zone1, zone1Terminal));
-  ASSERT_TRUE(airLoop.addBranchForZone(zone2, zone2Terminal));
-  ASSERT_EQ(2u, airLoop.thermalZones().size());
+  auto aduImpl = adu.getImpl<detail::ZoneHVACAirDistributionUnit_Impl>();
+  ASSERT_TRUE(aduImpl);
+  ASSERT_TRUE(aduImpl->setAirTerminal(terminal.cast<ModelObject>()));
 
-  auto splitterOutlets = airLoop.zoneSplitter().outletModelObjects();
+  ASSERT_TRUE(airLoop.addBranchForZone(zone1, dummyTerminal));
+  ASSERT_TRUE(airLoop.addBranchForZone(zone2, terminal));
+
+  const auto splitterOutlets = airLoop.zoneSplitter().outletModelObjects();
   ASSERT_EQ(2u, splitterOutlets.size());
-  auto zone2BranchNode = splitterOutlets[1].optionalCast<Node>();
-  ASSERT_TRUE(zone2BranchNode);
-  ASSERT_TRUE(reheat.addToNode(*zone2BranchNode));
+  auto firstBranch = splitterOutlets[0].optionalCast<Node>();
+  ASSERT_TRUE(firstBranch);
+  auto secondBranch = splitterOutlets[1].optionalCast<Node>();
+  ASSERT_TRUE(secondBranch);
+  auto dummyInlet = dummyTerminal.inletModelObject()->optionalCast<Node>();
+  ASSERT_TRUE(dummyInlet);
+  EXPECT_EQ(*firstBranch, *dummyInlet);
+
+  auto terminalInlet = terminal.inletModelObject()->optionalCast<Node>();
+  ASSERT_TRUE(terminalInlet);
+  EXPECT_EQ(*secondBranch, *terminalInlet);
+
+  auto terminalOutlet = terminal.outletModelObject()->optionalCast<Node>();
+  ASSERT_TRUE(terminalOutlet);
+  EXPECT_EQ(zone2.zoneAirNode(), *terminalOutlet);
 
   const auto zone1Equipment = zone1.equipment();
-  const auto zone2Equipment = zone2.equipment();
+  EXPECT_TRUE(zone1Equipment.empty());
 
-  EXPECT_EQ(std::ranges::find(zone1Equipment, reheat.cast<ModelObject>()), zone1Equipment.end());
-  EXPECT_NE(std::ranges::find(zone2Equipment, reheat.cast<ModelObject>()), zone2Equipment.end());
-  EXPECT_EQ(2u, airLoop.thermalZones().size());
+  const auto zone2Equipment = zone2.equipment();
+  ASSERT_EQ(1u, zone2Equipment.size());
+  EXPECT_EQ(terminal.cast<ModelObject>(), zone2Equipment.front());
+
+  auto linkedAirLoop = terminal.airLoopHVAC();
+  ASSERT_TRUE(linkedAirLoop);
+  EXPECT_EQ(airLoop, *linkedAirLoop);
+
+  auto resolvedOutletNode = adu.outletNode();
+  ASSERT_TRUE(resolvedOutletNode);
+  EXPECT_EQ(zone2.zoneAirNode(), resolvedOutletNode.get());
 }

@@ -43,21 +43,22 @@ namespace openstudio {
 
     // Schema Alignment Notes:
     // - Status: Partial Parity. Constructor, availability-schedule, reheat-coil, scalar field behavior, and loop-context insertion are aligned,
-    //   while the family-specific autosized-result queries remain outside the public epmodel API.
+    //   while autosized-result query helpers are not yet exposed in the public epmodel API.
     // - Canonical Counterpart: openstudio::model::AirTerminalSingleDuctConstantVolumeReheat.
     // - Implemented Parity: The schedule-and-coil constructor, `availabilitySchedule`, validated `setReheatCoil`, the scalar accessors for
     //   `maximumAirFlowRate`, `maximumHotWaterorSteamFlowRate`, `minimumHotWaterorSteamFlowRate`, `convergenceTolerance`, and
-    //   `maximumReheatAirTemperature`, and the wrapper-specific `addToNode` preserve the canonical wrapper contract on zone branches.
-    // - Documented Delta: The `epmodel`-only default constructor is preserved, and the family-specific autosized-result queries are not yet
-    //   surfaced in the public epmodel API.
+    //   `maximumReheatAirTemperature`, and the wrapper-specific `addToNode` preserve the canonical wrapper contract on zone branches and
+    //   register the terminal through the shared zone equipment-list helper.
+    // - Documented Delta: The `epmodel`-only default constructor is preserved, and the family-specific autosized-result query helpers are not
+    //   yet surfaced in the public API until shared sizing-result infrastructure exists.
     // - Field/Storage Mapping: The availability-schedule pointer, reheat-coil pointer, preserved scalar fields, and the inherited
     //   straight-component inlet/outlet node fields all store directly on the same EnergyPlus `AirTerminal:SingleDuct:ConstantVolume:Reheat`
     //   object. If persisted availability-schedule storage is cleared, `availabilitySchedule()` repairs that stored pointer by rebinding the
     //   model always-on discrete schedule onto the same object before returning it. `addToNode` wires the same object onto the target zone
-    //   branch, updates any linked zone air distribution unit outlet node to match the branch node, and appends the terminal to the owning
-    //   thermal zone's equipment list when that list is available.
+    //   branch, updates any linked zone air distribution unit outlet node to match the branch node, and registers the terminal on the owning
+    //   thermal-zone equipment list via the shared helper.
     // - Evidence: `src/model/AirTerminalSingleDuctConstantVolumeReheat.hpp`, `src/model/AirTerminalSingleDuctConstantVolumeReheat.cpp`, `src/energyplus/ForwardTranslator/ForwardTranslateAirTerminalSingleDuctConstantVolumeReheat.cpp`, and `src/epmodel/test/AirTerminalSingleDuctConstantVolumeReheat_GTest.cpp`.
-    // - Remaining Parity Work: Surface autosized-result queries only if shared sizing-result plumbing makes that data available in a stable way.
+    // - Remaining Parity Work: Expose the autosized-result query helpers once shared sizing-result plumbing exists.
     Schedule availabilitySchedule() const;
     bool setAvailabilitySchedule(Schedule& schedule);
 
