@@ -14,9 +14,10 @@
 #include <memory>
 
 namespace openstudio {
-namespace epmodel {
+  namespace epmodel {
 
   class Model;
+  class Node;
   class Schedule;
   class HVACComponent;
 
@@ -38,20 +39,24 @@ namespace epmodel {
 
     static IddObjectType iddObjectType();
 
+    bool addToNode(Node& node);
+
     // Schema Alignment Notes:
-    // - Status: Partial Parity. Constructor, availability-schedule, reheat-coil, and scalar field behavior are aligned, while node-link and other topology helpers remain intentionally narrower.
+    // - Status: Partial Parity. Constructor, availability-schedule, reheat-coil, scalar field behavior, and loop-context insertion are aligned,
+    //   while autosized-result lookup remains intentionally stubbed.
     // - Canonical Counterpart: openstudio::model::AirTerminalSingleDuctConstantVolumeReheat.
-    // - Implemented Parity: The schedule-and-coil constructor, `availabilitySchedule`, validated `setReheatCoil`, and the scalar accessors for
+    // - Implemented Parity: The schedule-and-coil constructor, `availabilitySchedule`, validated `setReheatCoil`, the scalar accessors for
     //   `maximumAirFlowRate`, `maximumHotWaterorSteamFlowRate`, `minimumHotWaterorSteamFlowRate`, `convergenceTolerance`, and
-    //   `maximumReheatAirTemperature` preserve the canonical wrapper contract.
-    // - Documented Delta: The `epmodel`-only default constructor is preserved, while inlet/outlet node conveniences still come from the shared
-    //   straight-component topology instead of wrapper-specific helpers.
+    //   `maximumReheatAirTemperature`, and the wrapper-specific `addToNode` preserve the canonical wrapper contract on zone branches.
+    // - Documented Delta: The `epmodel`-only default constructor is preserved, and the family-specific autosized-result query helpers remain
+    //   typed stubs until shared sizing-result infrastructure exists.
     // - Field/Storage Mapping: The availability-schedule pointer, reheat-coil pointer, preserved scalar fields, and the inherited
     //   straight-component inlet/outlet node fields all store directly on the same EnergyPlus `AirTerminal:SingleDuct:ConstantVolume:Reheat`
     //   object. If persisted availability-schedule storage is cleared, `availabilitySchedule()` repairs that stored pointer by rebinding the
-    //   model always-on discrete schedule onto the same object before returning it.
+    //   model always-on discrete schedule onto the same object before returning it. `addToNode` wires the same object onto the target zone
+    //   branch and also updates any linked zone air distribution unit outlet node to match the branch node.
     // - Evidence: `src/model/AirTerminalSingleDuctConstantVolumeReheat.hpp`, `src/model/AirTerminalSingleDuctConstantVolumeReheat.cpp`, `src/energyplus/ForwardTranslator/ForwardTranslateAirTerminalSingleDuctConstantVolumeReheat.cpp`, and `src/epmodel/test/AirTerminalSingleDuctConstantVolumeReheat_GTest.cpp`.
-    // - Remaining Parity Work: Add the omitted node-link and topology helpers when relationship parity expands.
+    // - Remaining Parity Work: Replace the autosized-result stubs once shared sizing-result plumbing exists.
     Schedule availabilitySchedule() const;
     bool setAvailabilitySchedule(Schedule& schedule);
 

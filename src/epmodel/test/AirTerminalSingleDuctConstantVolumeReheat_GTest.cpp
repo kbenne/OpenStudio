@@ -6,6 +6,10 @@
 #include <gtest/gtest.h>
 
 #include "EPModelFixture.hpp"
+#include "../HVACComponent/ThermalZone.hpp"
+#include "../Loop/AirLoopHVAC.hpp"
+#include "../ModelObject/ZoneHVACAirDistributionUnit.hpp"
+#include "../ModelObject/ZoneHVACAirDistributionUnit_Impl.hpp"
 #include "../Schedule/Schedule.hpp"
 #include "../Schedule/Schedule_Impl.hpp"
 #include "../Schedule/ScheduleCompact.hpp"
@@ -15,6 +19,8 @@
 #include "../StraightComponent/CoilHeatingGas.hpp"
 #include "../StraightComponent/CoilHeatingElectric.hpp"
 #include "../StraightComponent/FanConstantVolume.hpp"
+#include "../StraightComponent/Node.hpp"
+#include "../Splitter/AirLoopHVACZoneSplitter.hpp"
 #include "../WaterToAirComponent/CoilHeatingWater.hpp"
 
 #include <utilities/idd/AirTerminal_SingleDuct_ConstantVolume_Reheat_FieldEnums.hxx>
@@ -142,4 +148,62 @@ TEST_F(EPModelFixture, AirTerminalSingleDuctConstantVolumeReheat_AvailabilitySch
     terminal.getModelObjectTarget<Schedule>(openstudio::AirTerminal_SingleDuct_ConstantVolume_ReheatFields::AvailabilityScheduleName);
   ASSERT_TRUE(storedSchedule);
   EXPECT_EQ(alwaysOn, *storedSchedule);
+}
+
+TEST_F(EPModelFixture, AirTerminalSingleDuctConstantVolumeReheat_AddToNode_RejectsInvalidNodesAndContexts) {
+  Model model;
+  AirLoopHVAC airLoop(model);
+  ThermalZone zone(model);
+  AirTerminalSingleDuctConstantVolumeReheat terminal(model);
+  Node standaloneNode(model);
+  auto supplyInletNode = airLoop.supplyInletNode();
+  auto zoneAirNode = zone.zoneAirNode();
+
+  EXPECT_FALSE(terminal.addToNode(standaloneNode));
+  EXPECT_FALSE(terminal.addToNode(supplyInletNode));
+  EXPECT_FALSE(terminal.addToNode(zoneAirNode));
+  EXPECT_FALSE(terminal.inletModelObject());
+  EXPECT_FALSE(terminal.outletModelObject());
+  EXPECT_FALSE(terminal.airLoopHVAC());
+}
+
+TEST_F(EPModelFixture, AirTerminalSingleDuctConstantVolumeReheat_AddToNode_ResolvesAirLoopHVACAndADUOutletNode) {
+  Model model;
+  AirLoopHVAC airLoop(model);
+  ThermalZone zone(model);
+  AirTerminalSingleDuctConstantVolumeReheat terminal(model);
+  ZoneHVACAirDistributionUnit adu(model);
+
+  auto aduImpl = adu.getImpl<detail::ZoneHVACAirDistributionUnit_Impl>();
+  ASSERT_TRUE(aduImpl);
+  ASSERT_TRUE(aduImpl->setAirTerminal(terminal.cast<ModelObject>()));
+
+  auto branchObject = airLoop.zoneSplitter().lastOutletModelObject();
+  ASSERT_TRUE(branchObject);
+  auto branchNode = branchObject->optionalCast<Node>();
+  ASSERT_TRUE(branchNode);
+  ASSERT_TRUE(zone.addToNode(*branchNode));
+
+  auto zoneAirNode = zone.zoneAirNode();
+  ASSERT_TRUE(terminal.addToNode(zoneAirNode));
+
+  auto linkedAirLoop = terminal.airLoopHVAC();
+  ASSERT_TRUE(linkedAirLoop);
+  EXPECT_EQ(airLoop, *linkedAirLoop);
+
+  auto inletObject = terminal.inletModelObject();
+  ASSERT_TRUE(inletObject);
+  auto inletNode = inletObject->optionalCast<Node>();
+  ASSERT_TRUE(inletNode);
+  EXPECT_NE(zoneAirNode, *inletNode);
+
+  auto outletObject = terminal.outletModelObject();
+  ASSERT_TRUE(outletObject);
+  auto outletNode = outletObject->optionalCast<Node>();
+  ASSERT_TRUE(outletNode);
+  EXPECT_EQ(zoneAirNode, *outletNode);
+
+  auto resolvedOutletNode = adu.outletNode();
+  ASSERT_TRUE(resolvedOutletNode);
+  EXPECT_EQ(zoneAirNode, resolvedOutletNode.get());
 }

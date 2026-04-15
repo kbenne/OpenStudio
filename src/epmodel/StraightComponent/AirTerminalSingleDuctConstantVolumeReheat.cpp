@@ -6,12 +6,20 @@
 #include "StraightComponent/AirTerminalSingleDuctConstantVolumeReheat.hpp"
 #include "StraightComponent/AirTerminalSingleDuctConstantVolumeReheat_Impl.hpp"
 
+#include "HVACComponent/ThermalZone.hpp"
 #include "HVACComponent.hpp"
+#include "Loop/AirLoopHVAC.hpp"
 #include "Model.hpp"
 #include "ModelObject.hpp"
+#include "ModelObject/ZoneHVACAirDistributionUnit.hpp"
+#include "ModelObject/ZoneHVACAirDistributionUnit_Impl.hpp"
+#include "Node.hpp"
+#include "Mixer/AirLoopHVACZoneMixer.hpp"
+#include "Splitter/AirLoopHVACZoneSplitter.hpp"
 #include "Schedule/Schedule.hpp"
 #include "Schedule/Schedule_Impl.hpp"
 
+#include <algorithm>
 #include <utilities/core/Assert.hpp>
 #include <utilities/core/Logger.hpp>
 #include <utilities/core/StringHelpers.hpp>
@@ -64,6 +72,10 @@ namespace epmodel {
 
   IddObjectType AirTerminalSingleDuctConstantVolumeReheat::iddObjectType() {
     return IddObjectType::AirTerminal_SingleDuct_ConstantVolume_Reheat;
+  }
+
+  bool AirTerminalSingleDuctConstantVolumeReheat::addToNode(Node& node) {
+    return getImpl<detail::AirTerminalSingleDuctConstantVolumeReheat_Impl>()->addToNode(node);
   }
 
   Schedule AirTerminalSingleDuctConstantVolumeReheat::availabilitySchedule() const {
@@ -188,6 +200,75 @@ namespace epmodel {
 namespace openstudio {
 namespace epmodel {
   namespace detail {
+
+    boost::optional<ZoneHVACAirDistributionUnit> AirTerminalSingleDuctConstantVolumeReheat_Impl::zoneHVACAirDistributionUnit() const {
+      auto terminal = getObject<openstudio::epmodel::ModelObject>();
+      for (const auto& source : terminal.getSources(openstudio::IddObjectType::ZoneHVAC_AirDistributionUnit)) {
+        if (auto adu = source.optionalCast<openstudio::epmodel::ZoneHVACAirDistributionUnit>()) {
+          return adu;
+        }
+      }
+      return boost::none;
+    }
+
+    bool AirTerminalSingleDuctConstantVolumeReheat_Impl::addToNode(Node& node) {
+      if (node.model() != model()) {
+        return false;
+      }
+
+      auto airLoop = node.airLoopHVAC();
+      if (!airLoop) {
+        return false;
+      }
+
+      auto zoneSplitter = airLoop->zoneSplitter();
+      auto zoneMixer = airLoop->zoneMixer();
+      const auto thisNode = node.cast<ModelObject>();
+      const auto splitterOutlets = zoneSplitter.outletModelObjects();
+      const auto splitterIt = std::ranges::find(splitterOutlets, thisNode);
+      if (splitterIt == splitterOutlets.end()) {
+        LOG_FREE(Warn, "openstudio.epmodel.AirTerminalSingleDuctConstantVolumeReheat",
+                 "addToNode requires the drop node to be a ZoneSplitter outlet node for the target AirLoopHVAC.");
+        return false;
+      }
+      const auto splitterBranchIndex = static_cast<unsigned>(std::distance(splitterOutlets.begin(), splitterIt));
+
+      auto mixerInlet = zoneMixer.inletModelObject(splitterBranchIndex);
+      if (!mixerInlet) {
+        LOG_FREE(Warn, "openstudio.epmodel.AirTerminalSingleDuctConstantVolumeReheat",
+                 "addToNode requires a corresponding ZoneMixer inlet for ZoneSplitter branch index " << splitterBranchIndex << ".");
+        return false;
+      }
+
+      auto thisObject = getObject<openstudio::epmodel::ModelObject>();
+      if (!thisObject.name()) {
+        thisObject.createName();
+        if (!thisObject.name()) {
+          return false;
+        }
+      }
+
+      const std::string inletNodeName = node.nameString() + " - " + thisObject.nameString() + " Inlet Node";
+      auto inletNode = model().getOrCreateTransientByName<openstudio::epmodel::Node>(inletNodeName);
+
+      if (!zoneSplitter.setOutletModelObject(splitterBranchIndex, inletNode.cast<ModelObject>())) {
+        return false;
+      }
+
+      if (!setPointer(inletPort(), inletNode.handle())) {
+        return false;
+      }
+
+      if (!setPointer(outletPort(), node.handle())) {
+        return false;
+      }
+
+      if (auto adu = zoneHVACAirDistributionUnit()) {
+        adu->getImpl<openstudio::epmodel::detail::ZoneHVACAirDistributionUnit_Impl>()->setOutletNode(node);
+      }
+
+      return true;
+    }
 
     Schedule AirTerminalSingleDuctConstantVolumeReheat_Impl::availabilitySchedule() const {
       auto schedule = getObject<ModelObject>().getModelObjectTarget<Schedule>(
