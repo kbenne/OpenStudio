@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
-"""Generate full OpenStudio <-> EnergyPlus IDD mapping inventory.
+"""Generate the OpenStudio -> EnergyPlus IDD mapping inventory.
 
-Outputs:
-- doc/idd-schema-alignment/idd_mapping.md (human summary)
-- doc/idd-schema-alignment/idd_mapping_appendix.generated.md (machine appendix)
+Output:
+- doc/idd-schema-alignment/idd_mapping.generated.md
 
-This supersedes the original HVAC-only inventory with a complete two-way analysis
-across all OS and EP IDD object types. Mapping evidence is derived from:
-- ForwardTranslator.cpp switch (OS type -> model class -> translate function)
-- ForwardTranslator function bodies (translate function -> produced EP IDD types)
-- ReverseTranslator.cpp switch (EP type -> reverse translate function)
+Mapping evidence is derived from:
+- `src/model` `iddObjectType()` definitions
+- `ForwardTranslator.cpp` switch dispatch
+- ForwardTranslator function bodies and source files
 """
 
 from __future__ import annotations
@@ -24,10 +22,8 @@ OS_IDD_PATH = ROOT / "resources/model/OpenStudio.idd"
 EP_IDD_PATH = ROOT / "resources/energyplus/ProposedEnergy+.idd"
 FT_CPP = ROOT / "src/energyplus/ForwardTranslator.cpp"
 FT_DIR = ROOT / "src/energyplus/ForwardTranslator"
-RT_CPP = ROOT / "src/energyplus/ReverseTranslator.cpp"
 MODEL_DIR = ROOT / "src/model"
-SUMMARY_OUT_PATH = ROOT / "doc/idd-schema-alignment/idd_mapping.md"
-APPENDIX_OUT_PATH = ROOT / "doc/idd-schema-alignment/idd_mapping_appendix.generated.md"
+OUT_PATH = ROOT / "doc/idd-schema-alignment/idd_mapping.generated.md"
 
 OBJ_RE = re.compile(r"^\s*([A-Za-z0-9:_]+),\s*$")
 FIELD_RE = re.compile(r"^\s*([AN]\d+)[,;]\s*(.*)$")
@@ -330,9 +326,9 @@ def ep_types_created_in_function(body: str) -> list[str]:
     return out
 
 
-def parse_model_idd_mappings(files: Iterable[Path]) -> dict[str, str]:
-    """Return OS enum -> canonical model class from src/model iddObjectType() definitions."""
-    out: dict[str, str] = {}
+def parse_model_idd_mappings(files: Iterable[Path]) -> dict[str, dict[str, str]]:
+    """Return OS enum -> canonical model metadata from src/model sources."""
+    out: dict[str, dict[str, str]] = {}
     fn_re = re.compile(r"IddObjectType\s+([A-Za-z0-9_]+)::iddObjectType\s*\(\s*\)\s*\{")
 
     for path in files:
@@ -349,7 +345,26 @@ def parse_model_idd_mappings(files: Iterable[Path]) -> dict[str, str]:
             m_ret = re.search(r"(?:openstudio::)?IddObjectType::(OS_[A-Za-z0-9_]+)", body)
             if not m_ret:
                 continue
-            out[m_ret.group(1)] = model_class
+            out[m_ret.group(1)] = {"model_class": model_class}
+
+    return out
+
+
+def parse_model_direct_bases(files: Iterable[Path]) -> dict[str, str]:
+    """Return canonical model class -> direct public base class from src/model headers."""
+    out: dict[str, str] = {}
+    class_re = re.compile(
+        r"class\s+(?:MODEL_API\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*public\s+([A-Za-z_][A-Za-z0-9_:<>]*)",
+        re.MULTILINE,
+    )
+
+    for path in files:
+        if path.name.endswith("_Impl.hpp"):
+            continue
+        text = path.read_text(errors="ignore")
+        for model_class, base_class in class_re.findall(text):
+            if model_class not in out:
+                out[model_class] = base_class.split("::")[-1]
 
     return out
 
@@ -378,10 +393,12 @@ def main() -> None:
     ft_files = [FT_CPP] + sorted(FT_DIR.glob("*.cpp"))
     ft_functions = parse_ft_functions(ft_files, "ForwardTranslator")
     model_mappings = parse_model_idd_mappings(sorted(MODEL_DIR.rglob("*.cpp")))
+    model_direct_bases = parse_model_direct_bases(sorted(MODEL_DIR.rglob("*.hpp")))
 
     # OS enum -> EP enums from forward translator
     os_to_ep: dict[str, list[str]] = {}
     os_to_model: dict[str, str | None] = {}
+    os_to_direct_base: dict[str, str | None] = {}
     os_to_ft_files: dict[str, set[str]] = defaultdict(set)
 
     for os_enum_list in os_enum_to_names.values():
@@ -399,13 +416,10 @@ def main() -> None:
                 os_to_ft_files[os_enum].add(fn_meta["path"])
 
         os_to_ep[os_enum] = ep_types
-        os_to_model[os_enum] = model_mappings.get(os_enum)
-
-    # EP -> source OS enums (invert from forward map)
-    ep_to_os: dict[str, set[str]] = defaultdict(set)
-    for os_enum, ep_list in os_to_ep.items():
-        for ep in ep_list:
-            ep_to_os[ep].add(os_enum)
+        model_info = model_mappings.get(os_enum)
+        model_class = model_info["model_class"] if model_info else None
+        os_to_model[os_enum] = model_class
+        os_to_direct_base[os_enum] = model_direct_bases.get(model_class) if model_class else None
 
     # Second pass: include translator functions that are not switch-dispatched
     # (for example model-level translation flows like AirflowNetwork).
@@ -444,12 +458,10 @@ def main() -> None:
             os_to_ft_files[os_enum].add(meta["path"])
     # Build rows for OS objects
     os_rows: list[dict[str, str]] = []
-    os_only_count = 0
-    os_mapped_count = 0
-
     for os_name in sorted(os_idd_names):
         os_enum = os_idd_name_to_enum(os_name)
         model_class = os_to_model.get(os_enum) or ""
+        direct_base = os_to_direct_base.get(os_enum) or ""
         ft_files = ", ".join(f"`{path}`" for path in sorted(os_to_ft_files.get(os_enum, set())))
         ep_list = os_to_ep.get(os_enum, [])
 
@@ -466,67 +478,17 @@ def main() -> None:
             else:
                 ep_display.append(f"`{ep_enum}`")
 
-        if ep_list:
-            status = "Mapped"
-            os_mapped_count += 1
-        else:
-            status = "OS-only / no EP output"
-            os_only_count += 1
-
         os_rows.append(
             {
                 "os": os_name,
                 "model": model_class,
+                "direct_base": direct_base,
                 "ep": ", ".join(ep_display) if ep_display else "",
                 "ep_names": ", ".join(f"`{n}`" for ep_enum in sorted(ep_list) for n in ep_enum_to_names.get(ep_enum, [ep_enum])),
                 "ft_files": ft_files,
             }
         )
 
-    # Build EP rows
-    ep_rows: list[dict[str, str]] = []
-    ep_only_count = 0
-    ep_generated_count = 0
-    ep_generated_with_peer_count = 0
-    ep_generated_no_peer_count = 0
-
-    for ep_name in sorted(ep_idd_names):
-        ep_enum = ep_name.replace(":", "_")
-        os_sources = sorted(ep_to_os.get(ep_enum, set()))
-
-        os_sources_display: list[str] = []
-        for os_enum in os_sources:
-            os_names = os_enum_to_names.get(os_enum, [])
-            if len(os_names) == 1:
-                os_sources_display.append(f"`{os_names[0]}`")
-            elif len(os_names) > 1:
-                os_sources_display.append(f"`{os_enum}` (ambiguous: {', '.join(f'`{n}`' for n in os_names)})")
-            else:
-                os_sources_display.append(f"`{os_enum}`")
-
-        direct_os_peer = f"OS:{ep_name}" in os_idd_names
-
-        if os_sources:
-            if direct_os_peer:
-                status = "Generated by translator (has direct OS IDD peer)"
-                ep_generated_with_peer_count += 1
-            else:
-                status = "Generated by translator (no direct OS IDD peer)"
-                ep_generated_no_peer_count += 1
-            ep_generated_count += 1
-        else:
-            status = "EP-only (no OS forward source found)"
-            ep_only_count += 1
-
-        ep_rows.append(
-            {
-                "ep": ep_name,
-                "os_sources": ", ".join(os_sources_display),
-            }
-        )
-
-    os_only_types = sorted([r["os"] for r in os_rows if not r["ep"]])
-    ep_only_types = sorted([r["ep"] for r in ep_rows if not r["os_sources"]])
     os_rows_no_ep_output = [r for r in os_rows if not r["ep"]]
     os_rows_no_name_alignment = [
         r
@@ -534,81 +496,47 @@ def main() -> None:
         if r["model"] and r["ep_names"] and normalize_name_for_alignment(r["model"]) not in normalized_ep_names
     ]
 
-    summary_lines: list[str] = []
-    summary_lines.append("# IDD Mapping Summary (OS ↔ E+)")
-    summary_lines.append("")
-    summary_lines.append("This file summarizes full two-way type coverage between OpenStudio and EnergyPlus IDDs.")
-    summary_lines.append("")
-    summary_lines.append("Detailed generated tables are in `idd_mapping_appendix.generated.md`.")
-    summary_lines.append("")
-    summary_lines.append("## Counts")
-    summary_lines.append("")
-    summary_lines.append(f"- Total OS objects (`OpenStudio.idd`, `OS:*`): {len(os_idd_names)}")
-    summary_lines.append(f"- Total EP objects (`ProposedEnergy+.idd`): {len(ep_idd_names)}")
-    summary_lines.append(f"- OS objects with explicit EP output via ForwardTranslator: {os_mapped_count}")
-    summary_lines.append(f"- OS-only / no EP output evidence: {os_only_count}")
-    summary_lines.append(f"- EP objects generated by translator: {ep_generated_count}")
-    summary_lines.append(f"- EP generated with direct OS IDD peer: {ep_generated_with_peer_count}")
-    summary_lines.append(f"- EP generated with no direct OS IDD peer: {ep_generated_no_peer_count}")
-    summary_lines.append(f"- EP-only / no OS forward source found: {ep_only_count}")
-    summary_lines.append("")
-    summary_lines.append("## OS-only Types")
-    summary_lines.append("")
-    for t in os_only_types:
-        summary_lines.append(f"- `{t}`")
-    summary_lines.append("")
-    summary_lines.append("## E+-only Types")
-    summary_lines.append("")
-    for t in ep_only_types:
-        summary_lines.append(f"- `{t}`")
-    summary_lines.append("")
-    summary_lines.append("## Notes")
-    summary_lines.append("")
-    summary_lines.append("- OS-only here means no EP object creation evidence was found in forward translation paths.")
-    summary_lines.append("- E+-only here means no producing OS type was found by forward-translation analysis.")
-
-    appendix_lines: list[str] = []
-    appendix_lines.append("# IDD Mapping Appendix (Generated)")
-    appendix_lines.append("")
-    appendix_lines.append("This appendix is machine-generated from IDDs and translator source.")
-    appendix_lines.append("")
-    appendix_lines.append("## Method")
-    appendix_lines.append("")
-    appendix_lines.append("1. Parse object names from both IDDs.")
-    appendix_lines.append("2. Parse `src/model` `iddObjectType()` definitions to link `OS_*` -> canonical model class.")
-    appendix_lines.append("3. Parse `ForwardTranslator.cpp` switch to link `OS_*` -> direct `translateX` function.")
-    appendix_lines.append("4. Parse ForwardTranslator function bodies and source files for created EP `IddObjectType` IDF objects.")
-    appendix_lines.append("5. Include indirect model-level translator functions (not switch-dispatched) by matching model parameter class.")
-    appendix_lines.append("")
-    appendix_lines.append("## OS -> EP (Full)")
-    appendix_lines.append("")
-    appendix_lines.append("| OS IddObjectType | Model class | EP IddObjectType(s) produced | FT source file(s) |")
-    appendix_lines.append("| --- | --- | --- | --- |")
+    lines: list[str] = []
+    lines.append("# IDD Mapping (Generated)")
+    lines.append("")
+    lines.append("This file is machine-generated from IDDs and translator source.")
+    lines.append("")
+    lines.append("## Method")
+    lines.append("")
+    lines.append("1. Parse object names from both IDDs.")
+    lines.append("2. Parse `src/model` `iddObjectType()` definitions to link `OS_*` -> canonical model class.")
+    lines.append("3. Parse `ForwardTranslator.cpp` switch to link `OS_*` -> direct `translateX` function.")
+    lines.append("4. Parse ForwardTranslator function bodies and source files for created EP `IddObjectType` IDF objects.")
+    lines.append("5. Include indirect model-level translator functions (not switch-dispatched) by matching model parameter class.")
+    lines.append("")
+    lines.append("## OS -> EP (Full)")
+    lines.append("")
+    lines.append("| OS IddObjectType | Model class | Direct OS base class | EP IddObjectType(s) produced | FT source file(s) |")
+    lines.append("| --- | --- | --- | --- | --- |")
     for r in os_rows:
-        appendix_lines.append(f"| `{r['os']}` | `{r['model']}` | {r['ep'] or ''} | {r['ft_files']} |")
+        lines.append(f"| `{r['os']}` | `{r['model']}` | `{r['direct_base']}` | {r['ep'] or ''} | {r['ft_files']} |")
 
-    appendix_lines.append("")
-    appendix_lines.append("## OS Types With No EP Output Evidence")
-    appendix_lines.append("")
-    appendix_lines.append("| OS IddObjectType | Model class | FT source file(s) |")
-    appendix_lines.append("| --- | --- | --- |")
+    lines.append("")
+    lines.append("## OS Types With No EP Output Evidence")
+    lines.append("")
+    lines.append("| OS IddObjectType | Model class | Direct OS base class | FT source file(s) |")
+    lines.append("| --- | --- | --- | --- |")
     for r in os_rows_no_ep_output:
-        appendix_lines.append(f"| `{r['os']}` | `{r['model']}` | {r['ft_files']} |")
+        lines.append(f"| `{r['os']}` | `{r['model']}` | `{r['direct_base']}` | {r['ft_files']} |")
 
-    appendix_lines.append("")
-    appendix_lines.append("## OS ModelObject Types Without E+ Name Alignment")
-    appendix_lines.append("")
-    appendix_lines.append(
+    lines.append("")
+    lines.append("## OS ModelObject Types Without E+ Name Alignment")
+    lines.append("")
+    lines.append(
         "Name alignment here is based on the canonical `openstudio::model` class name and the EnergyPlus IDD type name after normalizing away punctuation and case differences."
     )
-    appendix_lines.append("")
-    appendix_lines.append("| OS IddObjectType | ModelObject Name | E+ IDD Type Name |")
-    appendix_lines.append("| --- | --- | --- |")
+    lines.append("")
+    lines.append("| OS IddObjectType | ModelObject Name | E+ IDD Type Name |")
+    lines.append("| --- | --- | --- |")
     for r in os_rows_no_name_alignment:
-        appendix_lines.append(f"| `{r['os']}` | `{r['model']}` | {r['ep_names']} |")
+        lines.append(f"| `{r['os']}` | `{r['model']}` | {r['ep_names']} |")
 
-    SUMMARY_OUT_PATH.write_text("\n".join(summary_lines) + "\n")
-    APPENDIX_OUT_PATH.write_text("\n".join(appendix_lines) + "\n")
+    OUT_PATH.write_text("\n".join(lines) + "\n")
 
 
 if __name__ == "__main__":

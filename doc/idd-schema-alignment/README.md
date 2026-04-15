@@ -16,10 +16,8 @@ Use these instead:
 
 - `os_hvac_concepts.md`
   Canonical `openstudio::model` HVAC topology concepts and patterns.
-- `idd_mapping.md`
-  High-level OpenStudio IDD to EnergyPlus IDD mapping summary.
-- `idd_mapping_appendix.generated.md`
-  Machine-generated full inventory tables with translator evidence.
+- `idd_mapping.generated.md`
+  Machine-generated OpenStudio IDD to EnergyPlus IDD inventory with translator evidence.
 - `os_idd_object_relationships.md`
   HVAC-focused object-list relationship inventory derived from
   `OpenStudio.idd`.
