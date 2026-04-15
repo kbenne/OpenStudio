@@ -6,11 +6,18 @@
 #include <gtest/gtest.h>
 
 #include "EPModelFixture.hpp"
+#include "../Schedule/Schedule.hpp"
+#include "../Schedule/Schedule_Impl.hpp"
 #include "../Schedule/ScheduleCompact.hpp"
 #include "../Schedule/ScheduleConstant.hpp"
 #include "../Schedule/ScheduleConstant_Impl.hpp"
 #include "../StraightComponent/AirTerminalSingleDuctConstantVolumeReheat.hpp"
+#include "../StraightComponent/CoilHeatingGas.hpp"
 #include "../StraightComponent/CoilHeatingElectric.hpp"
+#include "../StraightComponent/FanConstantVolume.hpp"
+#include "../WaterToAirComponent/CoilHeatingWater.hpp"
+
+#include <utilities/idd/AirTerminal_SingleDuct_ConstantVolume_Reheat_FieldEnums.hxx>
 
 using namespace openstudio::epmodel;
 
@@ -19,6 +26,24 @@ TEST_F(EPModelFixture, AirTerminalSingleDuctConstantVolumeReheat_DefaultConstruc
   AirTerminalSingleDuctConstantVolumeReheat terminal(model);
   EXPECT_EQ(AirTerminalSingleDuctConstantVolumeReheat::iddObjectType(), terminal.iddObject().type());
   EXPECT_FALSE(terminal.nameString().empty());
+}
+
+TEST_F(EPModelFixture, AirTerminalSingleDuctConstantVolumeReheat_ScheduleAndCoilConstructor_Parity) {
+  Model model;
+  auto alwaysOn = model.alwaysOnDiscreteSchedule();
+
+  CoilHeatingElectric electricCoil(model);
+  AirTerminalSingleDuctConstantVolumeReheat electricTerminal(model, alwaysOn, electricCoil);
+  EXPECT_EQ(alwaysOn.handle(), electricTerminal.availabilitySchedule().handle());
+  EXPECT_EQ(electricCoil.handle(), electricTerminal.reheatCoil().handle());
+
+  CoilHeatingGas gasCoil(model);
+  AirTerminalSingleDuctConstantVolumeReheat gasTerminal(model, alwaysOn, gasCoil);
+  EXPECT_EQ(gasCoil.handle(), gasTerminal.reheatCoil().handle());
+
+  CoilHeatingWater waterCoil(model);
+  AirTerminalSingleDuctConstantVolumeReheat waterTerminal(model, alwaysOn, waterCoil);
+  EXPECT_EQ(waterCoil.handle(), waterTerminal.reheatCoil().handle());
 }
 
 TEST_F(EPModelFixture, AirTerminalSingleDuctConstantVolumeReheat_ScalarAccessors_RoundTrip) {
@@ -74,4 +99,47 @@ TEST_F(EPModelFixture, AirTerminalSingleDuctConstantVolumeReheat_Relationships_R
   CoilHeatingElectric reheatCoil(model);
   EXPECT_TRUE(terminal.setReheatCoil(reheatCoil));
   EXPECT_EQ(reheatCoil.handle(), terminal.reheatCoil().handle());
+}
+
+TEST_F(EPModelFixture, AirTerminalSingleDuctConstantVolumeReheat_ReheatCoilValidation_GuardsUnsupportedAndForeignObjects) {
+  Model model;
+  auto alwaysOn = model.alwaysOnDiscreteSchedule();
+  CoilHeatingElectric reheatCoil(model);
+  AirTerminalSingleDuctConstantVolumeReheat terminal(model, alwaysOn, reheatCoil);
+
+  CoilHeatingGas gasCoil(model);
+  EXPECT_TRUE(terminal.setReheatCoil(gasCoil));
+  EXPECT_EQ(gasCoil.handle(), terminal.reheatCoil().handle());
+
+  CoilHeatingWater waterCoil(model);
+  EXPECT_TRUE(terminal.setReheatCoil(waterCoil));
+  EXPECT_EQ(waterCoil.handle(), terminal.reheatCoil().handle());
+
+  FanConstantVolume fan(model);
+  EXPECT_FALSE(terminal.setReheatCoil(fan));
+  EXPECT_EQ(waterCoil.handle(), terminal.reheatCoil().handle());
+
+  Model otherModel;
+  CoilHeatingElectric foreignCoil(otherModel);
+  EXPECT_FALSE(terminal.setReheatCoil(foreignCoil));
+  EXPECT_EQ(waterCoil.handle(), terminal.reheatCoil().handle());
+}
+
+TEST_F(EPModelFixture, AirTerminalSingleDuctConstantVolumeReheat_AvailabilityScheduleGetter_RepairsMissingReference) {
+  Model model;
+  auto alwaysOn = model.alwaysOnDiscreteSchedule();
+  CoilHeatingElectric reheatCoil(model);
+  AirTerminalSingleDuctConstantVolumeReheat terminal(model, alwaysOn, reheatCoil);
+
+  ASSERT_TRUE(
+    terminal.setPointer(openstudio::AirTerminal_SingleDuct_ConstantVolume_ReheatFields::AvailabilityScheduleName, openstudio::Handle()));
+  EXPECT_FALSE(
+    terminal.getModelObjectTarget<Schedule>(openstudio::AirTerminal_SingleDuct_ConstantVolume_ReheatFields::AvailabilityScheduleName));
+
+  const auto repairedSchedule = terminal.availabilitySchedule();
+  EXPECT_EQ(alwaysOn, repairedSchedule);
+  const auto storedSchedule =
+    terminal.getModelObjectTarget<Schedule>(openstudio::AirTerminal_SingleDuct_ConstantVolume_ReheatFields::AvailabilityScheduleName);
+  ASSERT_TRUE(storedSchedule);
+  EXPECT_EQ(alwaysOn, *storedSchedule);
 }
