@@ -74,7 +74,7 @@ namespace epmodel {
     };
 
     const ScheduleTypeSpec* findScheduleTypeSpec(const std::string& className, const std::string& scheduleDisplayName) {
-      static const std::array<ScheduleTypeSpec, 102> specs{{
+      static const std::array<ScheduleTypeSpec, 105> specs{{
         {"AirLoopHVAC", "Availability Manager Scheduled On", false, "Availability", 0.0, 1.0},
         {"AvailabilityManagerScheduledOn", "Availability Manager Scheduled On", false, "Availability", 0.0, 1.0},
         {"AvailabilityManagerScheduledOff", "Availability Manager Scheduled Off", false, "Availability", 0.0, 1.0},
@@ -163,9 +163,12 @@ namespace epmodel {
         {"WaterHeaterHeatPumpWrappedCondenser", "Inlet Air Humidity", true, "Dimensionless", 0.0, 1.0},
         {"WaterHeaterHeatPumpWrappedCondenser", "Compressor Ambient Temperature", true, "Temperature", boost::none, boost::none},
         {"WaterHeaterHeatPumpWrappedCondenser", "Inlet Air Mixer", true, "Dimensionless", 0.0, 1.0},
-        {"AirTerminalSingleDuctConstantVolumeNoReheat", "Availability", false, "Availability", 0.0, 1.0},
-        {"AirTerminalSingleDuctConstantVolumeReheat", "Availability", false, "Availability", 0.0, 1.0},
-        {"AirTerminalSingleDuctVAVNoReheat", "Availability", false, "Availability", 0.0, 1.0},
+      {"AirTerminalSingleDuctConstantVolumeNoReheat", "Availability", false, "Availability", 0.0, 1.0},
+      {"AirTerminalSingleDuctConstantVolumeReheat", "Availability", false, "Availability", 0.0, 1.0},
+      {"AirTerminalSingleDuctConstantVolumeFourPipeBeam", "Primary Air Availability", false, "Availability", 0.0, 1.0},
+      {"AirTerminalSingleDuctConstantVolumeFourPipeBeam", "Cooling Availability", false, "Availability", 0.0, 1.0},
+      {"AirTerminalSingleDuctConstantVolumeFourPipeBeam", "Heating Availability", false, "Availability", 0.0, 1.0},
+      {"AirTerminalSingleDuctVAVNoReheat", "Availability", false, "Availability", 0.0, 1.0},
         {"AirTerminalSingleDuctVAVNoReheat", "Minimum Air Flow Fraction", true, "Dimensionless", 0.0, 1.0},
         {"AirTerminalSingleDuctVAVNoReheat", "Minimum Air Flow Turndown", true, "Dimensionless", 0.0, 1.0},
         {"AirTerminalSingleDuctVAVReheat", "Availability", false, "Availability", 0.0, 1.0},
