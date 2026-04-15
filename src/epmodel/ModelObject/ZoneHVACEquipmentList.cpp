@@ -198,7 +198,7 @@ namespace epmodel {
           continue;
         }
 
-        equipmentList.eraseExtensibleGroup(i);
+        equipmentList.getImpl<openstudio::epmodel::detail::ModelObject_Impl>()->eraseExtensibleGroup(workspaceGroup->groupIndex(), false);
 
         auto remainingGroups = equipmentList.extensibleGroups();
         for (unsigned j = 0; j < remainingGroups.size(); ++j) {
