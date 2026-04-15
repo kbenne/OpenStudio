@@ -505,4 +505,3 @@ Detailed generated tables are in `idd_mapping_appendix.generated.md`.
 
 - OS-only here means no EP object creation evidence was found in forward translation paths.
 - E+-only here means no producing OS type was found by forward-translation analysis.
-- ReverseTranslator function evidence is tracked in the appendix for EP-side context.
