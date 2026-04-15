@@ -5,9 +5,13 @@
 
 #include <gtest/gtest.h>
 
+#include "../Curve/CurveQuadratic.hpp"
+#include "../Curve/CurveQuadratic_Impl.hpp"
 #include "EPModelFixture.hpp"
 #include "../Loop/AirLoopHVAC.hpp"
 #include "../Loop/PlantLoop.hpp"
+#include "../Schedule/ScheduleConstant.hpp"
+#include "../Schedule/ScheduleConstant_Impl.hpp"
 #include "../Splitter/AirLoopHVACZoneSplitter.hpp"
 #include "../StraightComponent/CoilHeatingDXVariableSpeed.hpp"
 #include "../StraightComponent/Node.hpp"
@@ -35,6 +39,16 @@ TEST_F(EPModelFixture, CoilHeatingDXVariableSpeed_DefaultConstructor) {
   EXPECT_NEAR(0.166667, coil.defrostTimePeriodFraction(), 0.000001);
   EXPECT_TRUE(coil.isResistiveDefrostHeaterCapacityAutosized());
   EXPECT_FALSE(coil.resistiveDefrostHeaterCapacity());
+  auto availability = coil.availabilitySchedule().optionalCast<ScheduleConstant>();
+  ASSERT_TRUE(availability);
+  EXPECT_DOUBLE_EQ(1.0, availability->value());
+  ASSERT_TRUE(coil.energyPartLoadFractionCurve().optionalCast<CurveQuadratic>());
+  EXPECT_FALSE(coil.defrostEnergyInputRatioFunctionofTemperatureCurve());
+  EXPECT_FALSE(coil.crankcaseHeaterCapacityFunctionofTemperatureCurve());
+
+  const auto children = coil.children();
+  ASSERT_EQ(1u, children.size());
+  EXPECT_EQ(coil.energyPartLoadFractionCurve().handle(), children[0].handle());
 }
 
 TEST_F(EPModelFixture, CoilHeatingDXVariableSpeed_ScalarAccessors_RoundTrip) {
@@ -97,6 +111,44 @@ TEST_F(EPModelFixture, CoilHeatingDXVariableSpeed_ScalarAccessors_RoundTrip) {
   ASSERT_TRUE(coil.resistiveDefrostHeaterCapacity());
   EXPECT_DOUBLE_EQ(500.0, *coil.resistiveDefrostHeaterCapacity());
   EXPECT_FALSE(coil.isResistiveDefrostHeaterCapacityAutosized());
+}
+
+TEST_F(EPModelFixture, CoilHeatingDXVariableSpeed_RelationshipSetters_RoundTrip) {
+  Model model;
+  CoilHeatingDXVariableSpeed coil(model);
+
+  ScheduleConstant availability(model);
+  ASSERT_TRUE(availability.setValue(0.4));
+  CurveQuadratic partLoadFraction(model);
+  CurveQuadratic defrostCurve(model);
+  CurveQuadratic crankcaseCurve(model);
+
+  EXPECT_TRUE(coil.setAvailabilitySchedule(availability));
+  EXPECT_EQ(availability.handle(), coil.availabilitySchedule().handle());
+
+  EXPECT_TRUE(coil.setEnergyPartLoadFractionCurve(partLoadFraction));
+  EXPECT_EQ(partLoadFraction.handle(), coil.energyPartLoadFractionCurve().handle());
+
+  EXPECT_TRUE(coil.setDefrostEnergyInputRatioFunctionofTemperatureCurve(defrostCurve));
+  ASSERT_TRUE(coil.defrostEnergyInputRatioFunctionofTemperatureCurve());
+  EXPECT_EQ(defrostCurve.handle(), coil.defrostEnergyInputRatioFunctionofTemperatureCurve()->handle());
+
+  EXPECT_TRUE(coil.setCrankcaseHeaterCapacityFunctionofTemperatureCurve(crankcaseCurve));
+  ASSERT_TRUE(coil.crankcaseHeaterCapacityFunctionofTemperatureCurve());
+  EXPECT_EQ(crankcaseCurve.handle(), coil.crankcaseHeaterCapacityFunctionofTemperatureCurve()->handle());
+
+  const auto children = coil.children();
+  ASSERT_EQ(3u, children.size());
+  EXPECT_EQ(partLoadFraction.handle(), children[0].handle());
+  EXPECT_EQ(defrostCurve.handle(), children[1].handle());
+  EXPECT_EQ(crankcaseCurve.handle(), children[2].handle());
+
+  coil.resetDefrostEnergyInputRatioFunctionofTemperatureCurve();
+  coil.resetCrankcaseHeaterCapacityFunctionofTemperatureCurve();
+  EXPECT_FALSE(coil.defrostEnergyInputRatioFunctionofTemperatureCurve());
+  EXPECT_FALSE(coil.crankcaseHeaterCapacityFunctionofTemperatureCurve());
+  ASSERT_EQ(1u, coil.children().size());
+  EXPECT_EQ(partLoadFraction.handle(), coil.children()[0].handle());
 }
 
 TEST_F(EPModelFixture, CoilHeatingDXVariableSpeed_AddToNodeSupplyOnly) {
