@@ -1154,7 +1154,7 @@ namespace epmodel {
       REGISTER_NEW_CONSTRUCTOR(IddObjectType::AirTerminal_DualDuct_ConstantVolume, AirTerminalDualDuctConstantVolume_Impl);
       REGISTER_NEW_CONSTRUCTOR(IddObjectType::AirTerminal_DualDuct_VAV, AirTerminalDualDuctVAV_Impl);
       REGISTER_NEW_CONSTRUCTOR(IddObjectType::AirTerminal_DualDuct_VAV_OutdoorAir, AirTerminalDualDuctVAVOutdoorAir_Impl);
-      REGISTER_NEW_CONSTRUCTOR(IddObjectType::AirTerminal_SingleDuct_ConstantVolume_CooledBeam, AirTerminalSingleDuctConstantVolumeCooledBeam_Impl);
+      REGISTER_NEW_CONSTRUCTOR(IddObjectType::OS_AirTerminal_SingleDuct_ConstantVolume_CooledBeam, AirTerminalSingleDuctConstantVolumeCooledBeam_Impl);
       REGISTER_NEW_CONSTRUCTOR(IddObjectType::AirTerminal_SingleDuct_ConstantVolume_FourPipeBeam,
                                AirTerminalSingleDuctConstantVolumeFourPipeBeam_Impl);
       REGISTER_NEW_CONSTRUCTOR(IddObjectType::AirTerminal_SingleDuct_ConstantVolume_FourPipeInduction,
@@ -2087,7 +2087,7 @@ namespace epmodel {
       REGISTER_COPY_CONSTRUCTOR(IddObjectType::AirTerminal_DualDuct_ConstantVolume, AirTerminalDualDuctConstantVolume_Impl);
       REGISTER_COPY_CONSTRUCTOR(IddObjectType::AirTerminal_DualDuct_VAV, AirTerminalDualDuctVAV_Impl);
       REGISTER_COPY_CONSTRUCTOR(IddObjectType::AirTerminal_DualDuct_VAV_OutdoorAir, AirTerminalDualDuctVAVOutdoorAir_Impl);
-      REGISTER_COPY_CONSTRUCTOR(IddObjectType::AirTerminal_SingleDuct_ConstantVolume_CooledBeam, AirTerminalSingleDuctConstantVolumeCooledBeam_Impl);
+      REGISTER_COPY_CONSTRUCTOR(IddObjectType::OS_AirTerminal_SingleDuct_ConstantVolume_CooledBeam, AirTerminalSingleDuctConstantVolumeCooledBeam_Impl);
       REGISTER_COPY_CONSTRUCTOR(IddObjectType::AirTerminal_SingleDuct_ConstantVolume_FourPipeBeam,
                                 AirTerminalSingleDuctConstantVolumeFourPipeBeam_Impl);
       REGISTER_COPY_CONSTRUCTOR(IddObjectType::AirTerminal_SingleDuct_ConstantVolume_FourPipeInduction,
