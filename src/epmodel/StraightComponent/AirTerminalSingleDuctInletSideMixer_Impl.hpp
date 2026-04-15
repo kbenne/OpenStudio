@@ -27,8 +27,6 @@ class EPMODEL_API AirTerminalSingleDuctInletSideMixer_Impl : public StraightComp
 
   std::string perPersonVentilationRateMode() const;
   bool setPerPersonVentilationRateMode(const std::string& perPersonVentilationRateMode);
-  bool controlForOutdoorAir() const;
-  bool setControlForOutdoorAir(bool controlForOutdoorAir);
   unsigned secondaryAirInletPort() const;
   boost::optional<Node> secondaryAirInletNode() const;
 

@@ -41,14 +41,15 @@ namespace epmodel {
     bool addToNode(Node& node);
 
     // Schema Alignment Notes:
-    // - Status: Partial Parity. The scalar inlet-side mixer controls are aligned, and the current epmodel zone-branch insertion path is exposed,
+    // - Status: Partial Parity. The persisted mixer scalar/relationship fields and the current epmodel zone-branch insertion path are aligned,
     //   but the broader canonical local-topology surface remains intentionally narrower.
     // - Canonical Counterpart: openstudio::model::AirTerminalSingleDuctInletSideMixer.
-    // - Implemented Parity: `perPersonVentilationRateMode`, `controlForOutdoorAir`, `secondaryAirInletNode`, and `addToNode` preserve the
-    //   canonical scalar/relationship contract on the current epmodel zone-branch path.
-    // - Documented Delta: The wrapper preserves the epmodel-only default constructor, and the broader canonical local-topology / translator-side
-    //   node relationships are still not surfaced as public epmodel helpers.
-    // - Field/Storage Mapping: The preserved scalar and direct object links map directly to the EnergyPlus `AirTerminal:SingleDuct:Mixer` fields.
+    // - Implemented Parity: `perPersonVentilationRateMode`, `secondaryAirInletNode`, and `addToNode` preserve the persisted
+    //   `AirTerminal:SingleDuct:Mixer` scalar/relationship contract on the current epmodel zone-branch path.
+    // - Documented Delta: The wrapper preserves the epmodel-only default constructor, and the canonical public `controlForOutdoorAir`
+    //   toggle is intentionally omitted because this EnergyPlus-backed wrapper has no dedicated persisted boolean field for that OS-only setting.
+    // - Field/Storage Mapping: The preserved scalar and direct object links map directly to the EnergyPlus `AirTerminal:SingleDuct:Mixer` fields,
+    //   and `addToNode` rewires the current epmodel zone branch by updating the same primary-air and outlet node fields.
     // - Evidence: `src/model/AirTerminalSingleDuctInletSideMixer.hpp`, `src/model/AirTerminalSingleDuctInletSideMixer.cpp`, `src/energyplus/ForwardTranslator/ForwardTranslateAirTerminalSingleDuctInletSideMixer.cpp`, and `src/epmodel/test/AirTerminalSingleDuctInletSideMixer_GTest.cpp`.
     // - Remaining Parity Work: Broaden the local-topology surface only if canonical insertion behavior needs to be mirrored more fully.
 
@@ -56,12 +57,6 @@ namespace epmodel {
     //@{
     std::string perPersonVentilationRateMode() const;
     bool setPerPersonVentilationRateMode(const std::string& perPersonVentilationRateMode);
-    //@}
-
-    /** @name Outdoor Air Control */
-    //@{
-    bool controlForOutdoorAir() const;
-    bool setControlForOutdoorAir(bool controlForOutdoorAir);
     //@}
 
     /** @name Secondary Air */

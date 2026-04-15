@@ -26,78 +26,17 @@
 #include "Splitter/AirLoopHVACZoneSplitter.hpp"
 #include "Splitter/AirLoopHVACZoneSplitter_Impl.hpp"
 
+#include <algorithm>
 #include <utilities/core/Assert.hpp>
 #include <utilities/core/Logger.hpp>
-#include <utilities/core/StringHelpers.hpp>
-#include <algorithm>
 #include <utilities/idd/AirTerminal_SingleDuct_Mixer_FieldEnums.hxx>
 #include <utilities/idd/IddEnums.hxx>
 #include <utilities/idd/IddFactory.hxx>
 #include <utilities/idd/IddObject.hpp>
-#include <utilities/idd/OS_AirTerminal_SingleDuct_InletSideMixer_FieldEnums.hxx>
 #include <utilities/idd/ZoneHVAC_EquipmentConnections_FieldEnums.hxx>
 
 namespace openstudio {
 namespace epmodel {
-
-  namespace {
-
-    bool getBooleanFieldValue(const detail::ModelObject_Impl& impl, int fieldIndex) {
-      const auto value = impl.getString(fieldIndex, true);
-      OS_ASSERT(value);
-      return openstudio::istringEqual(*value, "Yes");
-    }
-
-    bool setBooleanFieldValue(detail::ModelObject_Impl& impl, int fieldIndex, bool value) {
-      return impl.setString(fieldIndex, value ? "Yes" : "No", false);
-    }
-
-    void applyConstructorDefaults(AirTerminalSingleDuctInletSideMixer& terminal) {
-      OS_ASSERT(terminal.setControlForOutdoorAir(true));
-      OS_ASSERT(terminal.setPerPersonVentilationRateMode("CurrentOccupancy"));
-    }
-
-    boost::optional<ThermalZone> owningThermalZoneForBranchNode(const Model& model, const Node& node) {
-      for (const auto& zone : model.getConcreteModelObjects<ThermalZone>()) {
-        if (zone.zoneAirNode() == node) {
-          return zone;
-        }
-      }
-      return boost::none;
-    }
-
-    bool registerTerminalWithThermalZone(const ModelObject& terminal, ThermalZone& thermalZone) {
-      auto zoneImpl = thermalZone.getImpl<detail::ThermalZone_Impl>();
-      OS_ASSERT(zoneImpl);
-
-      auto zoneConnections = zoneImpl->getZoneHVACEquipmentConnections();
-      auto equipmentList = zoneImpl->zoneHVACEquipmentList();
-      if (!equipmentList) {
-        ZoneHVACEquipmentList newEquipmentList(thermalZone.model());
-        if (!newEquipmentList.name()) {
-          newEquipmentList.createName();
-        }
-        if (!zoneConnections.setPointer(openstudio::ZoneHVAC_EquipmentConnectionsFields::ZoneConditioningEquipmentListName, newEquipmentList.handle())) {
-          return false;
-        }
-        equipmentList = newEquipmentList;
-      }
-
-      auto equipmentListImpl = equipmentList->getImpl<detail::ZoneHVACEquipmentList_Impl>();
-      OS_ASSERT(equipmentListImpl);
-      return equipmentListImpl->addEquipment(terminal);
-    }
-
-    boost::optional<ZoneHVACAirDistributionUnit> zoneHVACAirDistributionUnitForTerminal(const ModelObject& terminal) {
-      for (const auto& source : terminal.getSources(openstudio::IddObjectType::ZoneHVAC_AirDistributionUnit)) {
-        if (auto adu = source.optionalCast<ZoneHVACAirDistributionUnit>()) {
-          return adu;
-        }
-      }
-      return boost::none;
-    }
-
-  }  // namespace
 
   AirTerminalSingleDuctInletSideMixer::AirTerminalSingleDuctInletSideMixer(const Model& model)
     : StraightComponent(AirTerminalSingleDuctInletSideMixer::iddObjectType(), model) {
@@ -105,7 +44,7 @@ namespace epmodel {
     OS_ASSERT(impl);
     detail::LoadContext context{const_cast<Model&>(model), SanitizationPolicy::Repair, SanitizationReport{}, {}};  // NOLINT
     impl->canonicalize(context);
-    applyConstructorDefaults(*this);
+    OS_ASSERT(setPerPersonVentilationRateMode("CurrentOccupancy"));
   }
 
   AirTerminalSingleDuctInletSideMixer::AirTerminalSingleDuctInletSideMixer(std::shared_ptr<detail::AirTerminalSingleDuctInletSideMixer_Impl> impl)
@@ -115,8 +54,8 @@ namespace epmodel {
     return IddObjectType::AirTerminal_SingleDuct_Mixer;
   }
 
-    std::vector<std::string> AirTerminalSingleDuctInletSideMixer::perPersonVentilationRateModeValues() {
-      return getIddKeyNames(IddFactory::instance().getObject(iddObjectType()).get(),
+  std::vector<std::string> AirTerminalSingleDuctInletSideMixer::perPersonVentilationRateModeValues() {
+    return getIddKeyNames(IddFactory::instance().getObject(iddObjectType()).get(),
                           openstudio::AirTerminal_SingleDuct_MixerFields::PerPersonVentilationRateMode);
   }
 
@@ -130,14 +69,6 @@ namespace epmodel {
 
   bool AirTerminalSingleDuctInletSideMixer::setPerPersonVentilationRateMode(const std::string& perPersonVentilationRateMode) {
     return getImpl<detail::AirTerminalSingleDuctInletSideMixer_Impl>()->setPerPersonVentilationRateMode(perPersonVentilationRateMode);
-  }
-
-  bool AirTerminalSingleDuctInletSideMixer::controlForOutdoorAir() const {
-    return getImpl<detail::AirTerminalSingleDuctInletSideMixer_Impl>()->controlForOutdoorAir();
-  }
-
-  bool AirTerminalSingleDuctInletSideMixer::setControlForOutdoorAir(bool controlForOutdoorAir) {
-    return getImpl<detail::AirTerminalSingleDuctInletSideMixer_Impl>()->setControlForOutdoorAir(controlForOutdoorAir);
   }
 
   unsigned AirTerminalSingleDuctInletSideMixer::secondaryAirInletPort() const {
@@ -209,16 +140,45 @@ namespace epmodel {
         return false;
       }
 
-      if (auto adu = zoneHVACAirDistributionUnitForTerminal(thisObject)) {
+      for (const auto& source : thisObject.getSources(openstudio::IddObjectType::ZoneHVAC_AirDistributionUnit)) {
+        auto adu = source.optionalCast<ZoneHVACAirDistributionUnit>();
+        if (!adu) {
+          continue;
+        }
         adu->getImpl<detail::ZoneHVACAirDistributionUnit_Impl>()->setOutletNode(node);
+        break;
       }
 
-      if (auto thermalZone = owningThermalZoneForBranchNode(model(), node)) {
-        if (!registerTerminalWithThermalZone(thisObject, *thermalZone)) {
+      for (auto& thermalZone : model().getConcreteModelObjects<ThermalZone>()) {
+        if (thermalZone.zoneAirNode() != node) {
+          continue;
+        }
+
+        auto zoneImpl = thermalZone.getImpl<detail::ThermalZone_Impl>();
+        OS_ASSERT(zoneImpl);
+
+        auto zoneConnections = zoneImpl->getZoneHVACEquipmentConnections();
+        auto equipmentList = zoneImpl->zoneHVACEquipmentList();
+        if (!equipmentList) {
+          ZoneHVACEquipmentList newEquipmentList(thermalZone.model());
+          if (!newEquipmentList.name()) {
+            newEquipmentList.createName();
+          }
+          if (!zoneConnections.setPointer(openstudio::ZoneHVAC_EquipmentConnectionsFields::ZoneConditioningEquipmentListName,
+                                          newEquipmentList.handle())) {
+            return false;
+          }
+          equipmentList = newEquipmentList;
+        }
+
+        auto equipmentListImpl = equipmentList->getImpl<detail::ZoneHVACEquipmentList_Impl>();
+        OS_ASSERT(equipmentListImpl);
+        if (!equipmentListImpl->addEquipment(thisObject)) {
           LOG_FREE(Warn, "openstudio.epmodel.AirTerminalSingleDuctInletSideMixer",
                    "addToNode failed to register the inlet-side mixer terminal with the owning thermal zone.");
           return false;
         }
+        break;
       }
 
       return true;
@@ -234,28 +194,20 @@ namespace epmodel {
       return setString(openstudio::AirTerminal_SingleDuct_MixerFields::PerPersonVentilationRateMode, perPersonVentilationRateMode);
     }
 
-    bool AirTerminalSingleDuctInletSideMixer_Impl::controlForOutdoorAir() const {
-      return getBooleanFieldValue(*this, openstudio::OS_AirTerminal_SingleDuct_InletSideMixerFields::ControlForOutdoorAir);
-    }
-
-    bool AirTerminalSingleDuctInletSideMixer_Impl::setControlForOutdoorAir(bool controlForOutdoorAir) {
-      return setBooleanFieldValue(*this, openstudio::OS_AirTerminal_SingleDuct_InletSideMixerFields::ControlForOutdoorAir, controlForOutdoorAir);
-    }
-
     std::vector<std::string> AirTerminalSingleDuctInletSideMixer_Impl::perPersonVentilationRateModeValues() const {
       return AirTerminalSingleDuctInletSideMixer::perPersonVentilationRateModeValues();
     }
 
     unsigned AirTerminalSingleDuctInletSideMixer_Impl::inletPort() const {
-      return openstudio::OS_AirTerminal_SingleDuct_InletSideMixerFields::TerminalUnitPrimaryAirInlet;
+      return openstudio::AirTerminal_SingleDuct_MixerFields::MixerPrimaryAirInletNodeName;
     }
 
     unsigned AirTerminalSingleDuctInletSideMixer_Impl::outletPort() const {
-      return openstudio::OS_AirTerminal_SingleDuct_InletSideMixerFields::TerminalUnitOutlet;
+      return openstudio::AirTerminal_SingleDuct_MixerFields::MixerOutletNodeName;
     }
 
     unsigned AirTerminalSingleDuctInletSideMixer_Impl::secondaryAirInletPort() const {
-      return openstudio::OS_AirTerminal_SingleDuct_InletSideMixerFields::TerminalUnitSecondaryAirInlet;
+      return openstudio::AirTerminal_SingleDuct_MixerFields::MixerSecondaryAirInletNodeName;
     }
 
     boost::optional<Node> AirTerminalSingleDuctInletSideMixer_Impl::secondaryAirInletNode() const {
