@@ -42,10 +42,12 @@ namespace epmodel {
     //   surfaced, while the broader canonical autosized-result helpers and more specialized local-topology conveniences remain intentionally narrower.
     // - Canonical Counterpart: openstudio::model::AirTerminalSingleDuctConstantVolumeFourPipeInduction.
     // - Implemented Parity: `availabilitySchedule`, `setHeatingCoil`, `setCoolingCoil`, `inducedAirInletNode`, `inducedAirInletPort`,
-    //   `addToNode`, the scalar accessors, and the explicit heating-coil constructor preserve the canonical relationship surface that is practical
-    //   here on the current epmodel zone-branch path.
-    // - Documented Delta: The optional cooling coil is exposed as a raw epmodel `HVACComponent` target, and the wrapper still omits the
-    //   canonical autosized-result helpers and broader topology conveniences such as the model-side exhaust-node convenience surface.
+    //   `addToNode`, the scalar accessors, and the explicit heating-coil constructor preserve the relationship surface that is practical on the
+    //   current epmodel zone-branch path.
+    // - Documented Delta: The optional epmodel-only no-arg constructor seeds a default availability schedule and defaulted flow parameters as a
+    //   convenience; canonical model exposes only the heating-coil constructor. The optional cooling coil is exposed as a raw epmodel
+    //   `HVACComponent` target, and the wrapper still omits the canonical autosized-result helpers and broader topology conveniences such as the
+    //   model-side exhaust-node convenience surface.
     // - Field/Storage Mapping: The availability schedule, heating/cooling coil targets, induced-air inlet node, preserved scalars, and inherited
     //   straight-component inlet/outlet node fields all store directly on the EnergyPlus `AirTerminal:SingleDuct:ConstantVolume:FourPipeInduction`
     //   object. `addToNode` wires the same object onto the current epmodel zone-branch path and updates the zone exhaust-node connection through the
