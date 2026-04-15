@@ -15,6 +15,7 @@
 #include "../Schedule/ScheduleCompact.hpp"
 #include "../Schedule/ScheduleConstant.hpp"
 #include "../Schedule/ScheduleConstant_Impl.hpp"
+#include "../StraightComponent/AirTerminalSingleDuctConstantVolumeNoReheat.hpp"
 #include "../StraightComponent/AirTerminalSingleDuctConstantVolumeReheat.hpp"
 #include "../StraightComponent/CoilHeatingGas.hpp"
 #include "../StraightComponent/CoilHeatingElectric.hpp"
@@ -24,6 +25,8 @@
 #include "../WaterToAirComponent/CoilHeatingWater.hpp"
 
 #include <utilities/idd/AirTerminal_SingleDuct_ConstantVolume_Reheat_FieldEnums.hxx>
+
+#include <algorithm>
 
 using namespace openstudio::epmodel;
 
@@ -206,4 +209,34 @@ TEST_F(EPModelFixture, AirTerminalSingleDuctConstantVolumeReheat_AddToNode_Resol
   auto resolvedOutletNode = adu.outletNode();
   ASSERT_TRUE(resolvedOutletNode);
   EXPECT_EQ(zoneAirNode, resolvedOutletNode.get());
+
+  const auto zoneEquipment = zone.equipment();
+  EXPECT_NE(std::ranges::find(zoneEquipment, terminal.cast<ModelObject>()), zoneEquipment.end());
+}
+
+TEST_F(EPModelFixture, AirTerminalSingleDuctConstantVolumeReheat_AddToNode_UsesSecondZoneBranchAndAddsEquipmentToOwningZone) {
+  Model model;
+  AirLoopHVAC airLoop(model);
+  ThermalZone zone1(model);
+  ThermalZone zone2(model);
+  AirTerminalSingleDuctConstantVolumeNoReheat zone1Terminal(model);
+  AirTerminalSingleDuctConstantVolumeNoReheat zone2Terminal(model);
+  AirTerminalSingleDuctConstantVolumeReheat reheat(model);
+
+  ASSERT_TRUE(airLoop.addBranchForZone(zone1, zone1Terminal));
+  ASSERT_TRUE(airLoop.addBranchForZone(zone2, zone2Terminal));
+  ASSERT_EQ(2u, airLoop.thermalZones().size());
+
+  auto splitterOutlets = airLoop.zoneSplitter().outletModelObjects();
+  ASSERT_EQ(2u, splitterOutlets.size());
+  auto zone2BranchNode = splitterOutlets[1].optionalCast<Node>();
+  ASSERT_TRUE(zone2BranchNode);
+  ASSERT_TRUE(reheat.addToNode(*zone2BranchNode));
+
+  const auto zone1Equipment = zone1.equipment();
+  const auto zone2Equipment = zone2.equipment();
+
+  EXPECT_EQ(std::ranges::find(zone1Equipment, reheat.cast<ModelObject>()), zone1Equipment.end());
+  EXPECT_NE(std::ranges::find(zone2Equipment, reheat.cast<ModelObject>()), zone2Equipment.end());
+  EXPECT_EQ(2u, airLoop.thermalZones().size());
 }

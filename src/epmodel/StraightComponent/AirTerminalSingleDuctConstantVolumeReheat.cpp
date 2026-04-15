@@ -7,12 +7,16 @@
 #include "StraightComponent/AirTerminalSingleDuctConstantVolumeReheat_Impl.hpp"
 
 #include "HVACComponent/ThermalZone.hpp"
+#include "HVACComponent/ThermalZone_Impl.hpp"
 #include "HVACComponent.hpp"
 #include "Loop/AirLoopHVAC.hpp"
 #include "Model.hpp"
 #include "ModelObject.hpp"
 #include "ModelObject/ZoneHVACAirDistributionUnit.hpp"
 #include "ModelObject/ZoneHVACAirDistributionUnit_Impl.hpp"
+#include "ModelObject/ZoneHVACEquipmentConnections.hpp"
+#include "ModelObject/ZoneHVACEquipmentList.hpp"
+#include "ModelObject/ZoneHVACEquipmentList_Impl.hpp"
 #include "Node.hpp"
 #include "Mixer/AirLoopHVACZoneMixer.hpp"
 #include "Splitter/AirLoopHVACZoneSplitter.hpp"
@@ -24,6 +28,9 @@
 #include <utilities/core/Logger.hpp>
 #include <utilities/core/StringHelpers.hpp>
 #include <utilities/idd/AirTerminal_SingleDuct_ConstantVolume_Reheat_FieldEnums.hxx>
+#include <utilities/idd/ZoneHVAC_EquipmentList_FieldEnums.hxx>
+#include <utilities/idd/ZoneHVAC_EquipmentConnections_FieldEnums.hxx>
+#include <utilities/idf/WorkspaceExtensibleGroup.hpp>
 #include <utilities/idd/IddEnums.hxx>
 
 namespace openstudio {
@@ -265,6 +272,52 @@ namespace epmodel {
 
       if (auto adu = zoneHVACAirDistributionUnit()) {
         adu->getImpl<openstudio::epmodel::detail::ZoneHVACAirDistributionUnit_Impl>()->setOutletNode(node);
+      }
+
+      if (splitterBranchIndex < airLoop->thermalZones().size()) {
+        auto zone = airLoop->thermalZones()[splitterBranchIndex];
+        auto zoneImpl = zone.getImpl<openstudio::epmodel::detail::ThermalZone_Impl>();
+        OS_ASSERT(zoneImpl);
+
+        auto equipmentList = zoneImpl->zoneHVACEquipmentList();
+        if (!equipmentList) {
+          auto connections = zoneImpl->getZoneHVACEquipmentConnections();
+          ZoneHVACEquipmentList newEquipmentList(model());
+          if (!newEquipmentList.name()) {
+            newEquipmentList.createName();
+          }
+          if (!connections.setPointer(openstudio::ZoneHVAC_EquipmentConnectionsFields::ZoneConditioningEquipmentListName, newEquipmentList.handle())) {
+            return false;
+          }
+          equipmentList = newEquipmentList;
+        }
+
+        if (!equipmentList) {
+          LOG_FREE(Warn, "openstudio.epmodel.AirTerminalSingleDuctConstantVolumeReheat",
+                   "addToNode could not resolve a thermal-zone equipment list for branch index " << splitterBranchIndex << ".");
+          return false;
+        }
+
+        auto equipmentListImpl = equipmentList->getImpl<openstudio::epmodel::detail::ZoneHVACEquipmentList_Impl>();
+        OS_ASSERT(equipmentListImpl);
+        const auto currentEquipmentSize = equipmentListImpl->equipment().size();
+        auto group = equipmentList->pushExtensibleGroup().optionalCast<openstudio::WorkspaceExtensibleGroup>();
+        if (!group) {
+          return false;
+        }
+        if (!group->setPointer(openstudio::ZoneHVAC_EquipmentListExtensibleFields::ZoneEquipmentName, thisObject.handle(), false)) {
+          equipmentList->eraseExtensibleGroup(group->groupIndex());
+          return false;
+        }
+        const auto priority = static_cast<unsigned>(currentEquipmentSize + 1u);
+        if (!group->setUnsigned(openstudio::ZoneHVAC_EquipmentListExtensibleFields::ZoneEquipmentCoolingSequence, priority)) {
+          equipmentList->eraseExtensibleGroup(group->groupIndex());
+          return false;
+        }
+        if (!group->setUnsigned(openstudio::ZoneHVAC_EquipmentListExtensibleFields::ZoneEquipmentHeatingorNoLoadSequence, priority)) {
+          equipmentList->eraseExtensibleGroup(group->groupIndex());
+          return false;
+        }
       }
 
       return true;
