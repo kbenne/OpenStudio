@@ -52,6 +52,18 @@ TEST_F(EPModelFixture, CoilCoolingDXVariableSpeed_DefaultConstructor) {
   EXPECT_EQ(coil.energyPartLoadFractionCurve().handle(), children[0].handle());
 }
 
+TEST_F(EPModelFixture, CoilCoolingDXVariableSpeed_RelationshipConstructor) {
+  Model model;
+  CurveQuadratic partLoadFraction(model);
+
+  CoilCoolingDXVariableSpeed coil(model, partLoadFraction);
+
+  EXPECT_EQ(partLoadFraction.handle(), coil.energyPartLoadFractionCurve().handle());
+  const auto children = coil.children();
+  ASSERT_EQ(1u, children.size());
+  EXPECT_EQ(partLoadFraction.handle(), children[0].handle());
+}
+
 TEST_F(EPModelFixture, CoilCoolingDXVariableSpeed_ScalarAccessors_RoundTrip) {
   Model model;
   CoilCoolingDXVariableSpeed coil(model);

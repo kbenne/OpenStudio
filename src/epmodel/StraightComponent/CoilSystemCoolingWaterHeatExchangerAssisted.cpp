@@ -46,20 +46,21 @@ namespace epmodel {
     OS_ASSERT(setCoolingCoil(coolingCoil));
 
     HeatExchangerAirToAirSensibleAndLatent heatExchanger(model);
-    OS_ASSERT(heatExchanger.setSupplyAirOutletTemperatureControl(false));
     OS_ASSERT(setHeatExchanger(heatExchanger));
   }
 
   CoilSystemCoolingWaterHeatExchangerAssisted::CoilSystemCoolingWaterHeatExchangerAssisted(const Model& model,
                                                                                            const AirToAirComponent& heatExchanger)
     : StraightComponent(CoilSystemCoolingWaterHeatExchangerAssisted::iddObjectType(), model) {
-    CoilCoolingWater coolingCoil(model);
-    OS_ASSERT(setCoolingCoil(coolingCoil));
     if (!setHeatExchanger(heatExchanger)) {
+      remove();
       std::ostringstream message;
       message << "Unable to set " << briefDescription() << "'s Heat Exchanger " << heatExchanger.briefDescription() << '.';
       throw std::runtime_error(message.str());
     }
+
+    CoilCoolingWater coolingCoil(model);
+    OS_ASSERT(setCoolingCoil(coolingCoil));
   }
 
   CoilSystemCoolingWaterHeatExchangerAssisted::CoilSystemCoolingWaterHeatExchangerAssisted(
@@ -137,17 +138,43 @@ namespace epmodel {
       }
 
       template <typename T>
-      bool setTypedRelationship(ModelObject_Impl& impl, unsigned objectTypeField, unsigned objectField, const T& target) {
-        if (!impl.setPointer(objectField, target.handle(), false)) {
+      T requiredNamedTarget(const ModelObject_Impl& impl, unsigned fieldIndex, const char* label) {
+        const auto value = impl.getString(fieldIndex, true);
+        if (!value) {
+          std::ostringstream message;
+          message << impl.briefDescription() << " does not have a " << label << " attached.";
+          throw std::runtime_error(message.str());
+        }
+        auto target = impl.model().getModelObjectByName<T>(*value);
+        if (!target) {
+          std::ostringstream message;
+          message << impl.briefDescription() << " could not resolve its " << label << " named '" << *value << "'.";
+          throw std::runtime_error(message.str());
+        }
+        return *target;
+      }
+
+      template <typename T>
+      bool setPointerRelationship(ModelObject_Impl& impl, unsigned objectTypeField, unsigned objectField, const T& target) {
+        if (!impl.setString(objectTypeField, target.iddObject().name())) {
           return false;
         }
-        return impl.setString(objectTypeField, target.iddObject().name());
+        return impl.setPointer(objectField, target.handle(), false);
       }
 
     }  // namespace
 
     bool CoilSystemCoolingWaterHeatExchangerAssisted_Impl::addToNode(Node& node) {
-      return false;
+      if (node.airLoopHVACOutdoorAirSystem()) {
+        return StraightComponent_Impl::addToNode(node);
+      }
+
+      auto airLoop = node.airLoopHVAC();
+      if (!(airLoop && airLoop->supplyComponent(node.handle()))) {
+        return false;
+      }
+
+      return StraightComponent_Impl::addToNode(node);
     }
 
     std::vector<ModelObject> CoilSystemCoolingWaterHeatExchangerAssisted_Impl::children() const {
@@ -165,14 +192,17 @@ namespace epmodel {
     }
 
     AirToAirComponent CoilSystemCoolingWaterHeatExchangerAssisted_Impl::heatExchanger() const {
-      const auto value = getString(kHeatExchangerField, true);
-      OS_ASSERT(value);
-      auto object = model().getModelObjectByName<AirToAirComponent>(*value);
-      OS_ASSERT(object);
-      return *object;
+      return requiredNamedTarget<AirToAirComponent>(*this, kHeatExchangerField, "Heat Exchanger");
     }
 
     bool CoilSystemCoolingWaterHeatExchangerAssisted_Impl::setHeatExchanger(const AirToAirComponent& heatExchanger) {
+      if (heatExchanger.model() != model()) {
+        return false;
+      }
+      const auto allowedTypes = heatExchangerObjectTypeValues();
+      if (std::find(allowedTypes.begin(), allowedTypes.end(), heatExchanger.iddObject().name()) == allowedTypes.end()) {
+        return false;
+      }
       if (!setString(kHeatExchangerObjectTypeField, heatExchanger.iddObject().name())) {
         return false;
       }
@@ -184,7 +214,7 @@ namespace epmodel {
     }
 
     bool CoilSystemCoolingWaterHeatExchangerAssisted_Impl::setCoolingCoil(const WaterToAirComponent& coolingCoil) {
-      return setTypedRelationship(*this, kCoolingCoilObjectTypeField, kCoolingCoilField, coolingCoil);
+      return setPointerRelationship(*this, kCoolingCoilObjectTypeField, kCoolingCoilField, coolingCoil);
     }
 
     std::string CoilSystemCoolingWaterHeatExchangerAssisted_Impl::heatExchangerObjectType() const {

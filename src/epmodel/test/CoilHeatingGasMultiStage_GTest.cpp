@@ -7,6 +7,7 @@
 
 #include "../Curve/CurveQuadratic.hpp"
 #include "EPModelFixture.hpp"
+#include "../HVACComponent/AirLoopHVACOutdoorAirSystem.hpp"
 #include "../Loop/AirLoopHVAC.hpp"
 #include "../Loop/PlantLoop.hpp"
 #include "../Splitter/AirLoopHVACZoneSplitter.hpp"
@@ -32,6 +33,22 @@ TEST_F(EPModelFixture, CoilHeatingGasMultiStage_DefaultConstructor) {
   EXPECT_FALSE(coil.offCycleParasiticGasLoad());
   EXPECT_FALSE(coil.parasiticGasLoad());
   EXPECT_FALSE(coil.partLoadFractionCorrelationCurve());
+}
+
+TEST_F(EPModelFixture, CoilHeatingGasMultiStage_AvailabilityScheduleGetterRepairsMissingRequiredReference) {
+  Model model;
+  CoilHeatingGasMultiStage coil(model);
+
+  ASSERT_TRUE(coil.setPointer(openstudio::Coil_Heating_Gas_MultiStageFields::AvailabilityScheduleName, openstudio::Handle()));
+  EXPECT_FALSE(coil.getModelObjectTarget<Schedule>(openstudio::Coil_Heating_Gas_MultiStageFields::AvailabilityScheduleName));
+
+  const auto repairedAvailability = coil.availabilitySchedule().optionalCast<ScheduleConstant>();
+  ASSERT_TRUE(repairedAvailability);
+  EXPECT_EQ(model.alwaysOnDiscreteSchedule().handle(), repairedAvailability->handle());
+  EXPECT_DOUBLE_EQ(1.0, repairedAvailability->value());
+  ASSERT_TRUE(coil.getModelObjectTarget<Schedule>(openstudio::Coil_Heating_Gas_MultiStageFields::AvailabilityScheduleName));
+  EXPECT_EQ(model.alwaysOnDiscreteSchedule().handle(),
+            coil.getModelObjectTarget<Schedule>(openstudio::Coil_Heating_Gas_MultiStageFields::AvailabilityScheduleName)->handle());
 }
 
 TEST_F(EPModelFixture, CoilHeatingGasMultiStage_ScalarAccessors_RoundTrip) {
@@ -82,15 +99,34 @@ TEST_F(EPModelFixture, CoilHeatingGasMultiStage_ScalarAccessors_RoundTrip) {
 TEST_F(EPModelFixture, CoilHeatingGasMultiStage_AddToNodeSupplyOnly) {
   Model model;
   AirLoopHVAC airLoop(model);
+  AirLoopHVACOutdoorAirSystem oaSystem(model);
   CoilHeatingGasMultiStage supplyCoil(model);
   CoilHeatingGasMultiStage demandCoil(model);
+  CoilHeatingGasMultiStage oaCoil(model);
+  CoilHeatingGasMultiStage standaloneCoil(model);
 
   auto supplyInletNode = airLoop.supplyInletNode();
   EXPECT_FALSE(supplyCoil.addToNode(supplyInletNode));
   EXPECT_FALSE(supplyCoil.inletModelObject());
   EXPECT_FALSE(supplyCoil.outletModelObject());
+  EXPECT_FALSE(supplyCoil.airLoopHVAC());
 
   auto demandInletNode = airLoop.demandInletNode();
   EXPECT_FALSE(demandCoil.addToNode(demandInletNode));
   EXPECT_FALSE(demandCoil.airLoopHVAC());
+  EXPECT_FALSE(demandCoil.inletModelObject());
+  EXPECT_FALSE(demandCoil.outletModelObject());
+
+  ASSERT_TRUE(oaSystem.outboardOANode());
+  auto oaNode = oaSystem.outboardOANode();
+  EXPECT_FALSE(oaCoil.addToNode(*oaNode));
+  EXPECT_FALSE(oaCoil.inletModelObject());
+  EXPECT_FALSE(oaCoil.outletModelObject());
+  EXPECT_FALSE(oaCoil.airLoopHVAC());
+
+  Node orphanNode(model);
+  EXPECT_FALSE(standaloneCoil.addToNode(orphanNode));
+  EXPECT_FALSE(standaloneCoil.inletModelObject());
+  EXPECT_FALSE(standaloneCoil.outletModelObject());
+  EXPECT_FALSE(standaloneCoil.airLoopHVAC());
 }

@@ -61,6 +61,12 @@ CoilHeatingDXVariableSpeed::CoilHeatingDXVariableSpeed(const Model& model)
   autosizeResistiveDefrostHeaterCapacity();
 }
 
+CoilHeatingDXVariableSpeed::CoilHeatingDXVariableSpeed(const Model& model, const Curve& partLoadFraction)
+  : CoilHeatingDXVariableSpeed(model) {
+  const bool ok = setEnergyPartLoadFractionCurve(partLoadFraction);
+  OS_ASSERT(ok);
+}
+
 CoilHeatingDXVariableSpeed::CoilHeatingDXVariableSpeed(std::shared_ptr<detail::CoilHeatingDXVariableSpeed_Impl> impl)
   : StraightComponent(std::move(impl)) {}
 

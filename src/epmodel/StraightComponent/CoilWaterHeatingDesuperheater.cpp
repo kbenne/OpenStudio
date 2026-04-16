@@ -10,6 +10,7 @@
 #include "Curve/CurveBiquadratic_Impl.hpp"
 #include "Model.hpp"
 #include "ModelObject/ModelObject.hpp"
+#include "StraightComponent/Node.hpp"
 #include "Schedule/Schedule.hpp"
 #include "Schedule/Schedule_Impl.hpp"
 
@@ -83,6 +84,10 @@ namespace epmodel {
 
   void CoilWaterHeatingDesuperheater::resetHeatingSource() {
     getImpl<detail::CoilWaterHeatingDesuperheater_Impl>()->resetHeatingSource();
+  }
+
+  bool CoilWaterHeatingDesuperheater::addToNode(Node& node) {
+    return getImpl<detail::CoilWaterHeatingDesuperheater_Impl>()->addToNode(node);
   }
 
   double CoilWaterHeatingDesuperheater::deadBandTemperatureDifference() const {
@@ -289,6 +294,10 @@ namespace epmodel {
 
     void CoilWaterHeatingDesuperheater_Impl::resetHeatingSource() {
       OS_ASSERT(setPointer(openstudio::Coil_WaterHeating_DesuperheaterFields::HeatingSourceName, openstudio::Handle(), false));
+    }
+
+    bool CoilWaterHeatingDesuperheater_Impl::addToNode(Node& /*node*/) {
+      return false;
     }
 
     double CoilWaterHeatingDesuperheater_Impl::deadBandTemperatureDifference() const {

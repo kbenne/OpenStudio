@@ -78,6 +78,12 @@ CoilCoolingDXVariableSpeed::CoilCoolingDXVariableSpeed(const Model& model)
   OS_ASSERT(ok);
 }
 
+CoilCoolingDXVariableSpeed::CoilCoolingDXVariableSpeed(const Model& model, const Curve& partLoadFraction)
+  : CoilCoolingDXVariableSpeed(model) {
+  const bool ok = setEnergyPartLoadFractionCurve(partLoadFraction);
+  OS_ASSERT(ok);
+}
+
 CoilCoolingDXVariableSpeed::CoilCoolingDXVariableSpeed(std::shared_ptr<detail::CoilCoolingDXVariableSpeed_Impl> impl)
   : StraightComponent(std::move(impl)) {}
 

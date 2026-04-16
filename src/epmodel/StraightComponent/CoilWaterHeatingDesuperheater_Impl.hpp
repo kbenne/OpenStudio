@@ -36,6 +36,8 @@ namespace epmodel {
       bool setHeatingSource(const ModelObject& heatingSource);
       void resetHeatingSource();
 
+      bool addToNode(Node& node) override;
+
       double deadBandTemperatureDifference() const;
       bool isDeadBandTemperatureDifferenceDefaulted() const;
       bool setDeadBandTemperatureDifference(double deadBandTemperatureDifference);

@@ -6,9 +6,11 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <stdexcept>
 
 #include "EPModelFixture.hpp"
 #include "../AirToAirComponent/HeatExchangerAirToAirSensibleAndLatent.hpp"
+#include "../AirToAirComponent/HeatExchangerDesiccantBalancedFlow.hpp"
 #include "../HVACComponent/AirLoopHVACOutdoorAirSystem.hpp"
 #include "../HVACComponent/ControllerWaterCoil.hpp"
 #include "../Loop/AirLoopHVAC.hpp"
@@ -82,22 +84,41 @@ TEST_F(EPModelFixture, CoilSystemCoolingWaterHeatExchangerAssisted_RelationshipA
   EXPECT_EQ(replacementHeatExchanger.iddObject().name(), coilSystem.heatExchangerObjectType());
 }
 
+TEST_F(EPModelFixture, CoilSystemCoolingWaterHeatExchangerAssisted_InvalidRelationshipConstructorCleansUp) {
+  Model model;
+  HeatExchangerDesiccantBalancedFlow hxDesiccant(model);
+
+  const auto beforeCount = model.getObjectsByType(CoilSystemCoolingWaterHeatExchangerAssisted::iddObjectType()).size();
+
+  EXPECT_ANY_THROW((CoilSystemCoolingWaterHeatExchangerAssisted(model, hxDesiccant)));
+
+  EXPECT_EQ(beforeCount, model.getObjectsByType(CoilSystemCoolingWaterHeatExchangerAssisted::iddObjectType()).size());
+}
+
 TEST_F(EPModelFixture, CoilSystemCoolingWaterHeatExchangerAssisted_AddToNodeRejected) {
   Model model;
   AirLoopHVAC airLoop(model);
-  CoilSystemCoolingWaterHeatExchangerAssisted coilSystem(model);
-  AirLoopHVACOutdoorAirSystem oaSystem(model);
 
-  auto supplyInletNode = airLoop.supplyInletNode();
-  EXPECT_FALSE(coilSystem.addToNode(supplyInletNode));
-  EXPECT_FALSE(coilSystem.inletModelObject());
-  EXPECT_FALSE(coilSystem.outletModelObject());
-
+  CoilSystemCoolingWaterHeatExchangerAssisted supplyCoilSystem(model);
+  auto coolingCoil = supplyCoilSystem.coolingCoil();
+  auto heatExchanger = supplyCoilSystem.heatExchanger();
   auto supplyOutletNode = airLoop.supplyOutletNode();
-  ASSERT_TRUE(oaSystem.addToNode(supplyOutletNode));
-  auto outboardOANode = oaSystem.outboardOANode();
-  ASSERT_TRUE(outboardOANode);
-  EXPECT_FALSE(coilSystem.addToNode(*outboardOANode));
+  EXPECT_FALSE(coolingCoil.addToNode(supplyOutletNode));
+  EXPECT_FALSE(heatExchanger.addToNode(supplyOutletNode));
+  EXPECT_EQ(2u, airLoop.supplyComponents().size());
+
+  EXPECT_TRUE(supplyCoilSystem.addToNode(supplyOutletNode));
+  EXPECT_EQ(3u, airLoop.supplyComponents().size());
+  ASSERT_TRUE(supplyCoilSystem.airLoopHVAC());
+  EXPECT_EQ(airLoop.handle(), supplyCoilSystem.airLoopHVAC()->handle());
+  ASSERT_TRUE(coolingCoil.containingHVACComponent());
+  EXPECT_EQ(supplyCoilSystem.handle(), coolingCoil.containingHVACComponent().get().handle());
+  ASSERT_TRUE(heatExchanger.containingHVACComponent());
+  EXPECT_EQ(supplyCoilSystem.handle(), heatExchanger.containingHVACComponent().get().handle());
+
+  CoilSystemCoolingWaterHeatExchangerAssisted standaloneCoilSystem(model);
+  Node orphanNode(model);
+  EXPECT_FALSE(standaloneCoilSystem.addToNode(orphanNode));
 }
 
 TEST_F(EPModelFixture, CoilSystemCoolingWaterHeatExchangerAssisted_ContainedCoolingCoilDoesNotCreateStandaloneController) {

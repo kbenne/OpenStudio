@@ -9,6 +9,7 @@
 #include "../Curve/CurveQuadratic_Impl.hpp"
 #include "EPModelFixture.hpp"
 #include "../Loop/AirLoopHVAC.hpp"
+#include "../HVACComponent/AirLoopHVACOutdoorAirSystem.hpp"
 #include "../Loop/PlantLoop.hpp"
 #include "../Schedule/ScheduleConstant.hpp"
 #include "../Schedule/ScheduleConstant_Impl.hpp"
@@ -49,6 +50,28 @@ TEST_F(EPModelFixture, CoilHeatingDXVariableSpeed_DefaultConstructor) {
   const auto children = coil.children();
   ASSERT_EQ(1u, children.size());
   EXPECT_EQ(coil.energyPartLoadFractionCurve().handle(), children[0].handle());
+}
+
+TEST_F(EPModelFixture, CoilHeatingDXVariableSpeed_RelationshipConstructor) {
+  Model model;
+  CurveQuadratic partLoadFraction(model);
+
+  CoilHeatingDXVariableSpeed coil(model, partLoadFraction);
+
+  EXPECT_EQ(partLoadFraction.handle(), coil.energyPartLoadFractionCurve().handle());
+  EXPECT_EQ(1, coil.nominalSpeedLevel());
+  EXPECT_TRUE(coil.isRatedHeatingCapacityAtSelectedNominalSpeedLevelAutosized());
+  EXPECT_TRUE(coil.isRatedAirFlowRateAtSelectedNominalSpeedLevelAutosized());
+  EXPECT_DOUBLE_EQ(-5.0, coil.minimumOutdoorDryBulbTemperatureforCompressorOperation());
+  EXPECT_DOUBLE_EQ(5.0, coil.maximumOutdoorDryBulbTemperatureforDefrostOperation());
+  EXPECT_DOUBLE_EQ(200.0, coil.crankcaseHeaterCapacity());
+  EXPECT_EQ("Resistive", coil.defrostStrategy());
+  EXPECT_EQ("OnDemand", coil.defrostControl());
+  EXPECT_NEAR(0.166667, coil.defrostTimePeriodFraction(), 0.000001);
+  EXPECT_TRUE(coil.isResistiveDefrostHeaterCapacityAutosized());
+  const auto children = coil.children();
+  ASSERT_EQ(1u, children.size());
+  EXPECT_EQ(partLoadFraction.handle(), children[0].handle());
 }
 
 TEST_F(EPModelFixture, CoilHeatingDXVariableSpeed_ScalarAccessors_RoundTrip) {
@@ -154,11 +177,15 @@ TEST_F(EPModelFixture, CoilHeatingDXVariableSpeed_RelationshipSetters_RoundTrip)
 TEST_F(EPModelFixture, CoilHeatingDXVariableSpeed_AddToNodeSupplyOnly) {
   Model model;
   AirLoopHVAC airLoop(model);
+  AirLoopHVACOutdoorAirSystem oaSystem(model);
   CoilHeatingDXVariableSpeed supplyCoil(model);
   CoilHeatingDXVariableSpeed demandCoil(model);
+  CoilHeatingDXVariableSpeed oaCoil(model);
 
   auto supplyInletNode = airLoop.supplyInletNode();
   EXPECT_TRUE(supplyCoil.addToNode(supplyInletNode));
+  ASSERT_TRUE(supplyCoil.airLoopHVAC());
+  EXPECT_EQ(airLoop.handle(), supplyCoil.airLoopHVAC()->handle());
   ASSERT_TRUE(supplyCoil.inletModelObject());
   EXPECT_EQ(supplyInletNode, supplyCoil.inletModelObject()->cast<Node>());
   EXPECT_TRUE(supplyCoil.outletModelObject());
@@ -166,4 +193,12 @@ TEST_F(EPModelFixture, CoilHeatingDXVariableSpeed_AddToNodeSupplyOnly) {
   auto demandInletNode = airLoop.demandInletNode();
   EXPECT_FALSE(demandCoil.addToNode(demandInletNode));
   EXPECT_FALSE(demandCoil.airLoopHVAC());
+  EXPECT_FALSE(demandCoil.inletModelObject());
+  EXPECT_FALSE(demandCoil.outletModelObject());
+
+  auto oaNode = oaSystem.outboardOANode();
+  ASSERT_TRUE(oaNode);
+  EXPECT_FALSE(oaCoil.addToNode(*oaNode));
+  EXPECT_FALSE(oaCoil.inletModelObject());
+  EXPECT_FALSE(oaCoil.outletModelObject());
 }

@@ -39,7 +39,7 @@ namespace epmodel {
       std::vector<std::string> heatExchangerObjectTypeValues() const;
       std::vector<std::string> coolingCoilObjectTypeValues() const;
 
-      // Scalar-only parity surface: relationship fields remain excluded by contract.
+      // Cooling-coil targets are tracked directly; the heat-exchanger side stays as schema-valid name/object-type storage.
       /** @name Heat exchanger object type */
       //@{
       std::string heatExchangerObjectType() const;

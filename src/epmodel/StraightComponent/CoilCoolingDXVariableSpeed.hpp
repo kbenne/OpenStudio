@@ -28,6 +28,7 @@ class EPMODEL_API CoilCoolingDXVariableSpeed : public StraightComponent
 {
  public:
   explicit CoilCoolingDXVariableSpeed(const Model& model);
+  explicit CoilCoolingDXVariableSpeed(const Model& model, const Curve& partLoadFraction);
 
   virtual ~CoilCoolingDXVariableSpeed() override = default;
   CoilCoolingDXVariableSpeed(const CoilCoolingDXVariableSpeed& other) = default;
@@ -47,8 +48,8 @@ class EPMODEL_API CoilCoolingDXVariableSpeed : public StraightComponent
   //   remain out of scope.
   // - Canonical Counterpart: openstudio::model::CoilCoolingDXVariableSpeed.
   // - Implemented Parity: The speed-level capacity, airflow, compressor, condenser, and evaporative-condenser helpers preserve the canonical naming and
-  //   autosize behavior; the required availability schedule and energy-part-load-fraction curve are now preserved; and optional basin-heater and
-  //   crankcase-heater relationship helpers are exposed for the current bounded slice.
+  //   autosize behavior; the required availability schedule, constructor-with-part-load-fraction curve, and energy-part-load-fraction curve are now
+  //   preserved; and optional basin-heater and crankcase-heater relationship helpers are exposed for the current bounded slice.
   // - Documented Delta: Canonical variable-speed stage-data / speed-list parity remains deferred because epmodel does not yet expose the
   //   `CoilCoolingDXVariableSpeedSpeedData` family or its owning list surface.
   // - Field/Storage Mapping: Preserved scalars map directly to EnergyPlus `Coil:Cooling:DX:VariableSpeed` fields.
