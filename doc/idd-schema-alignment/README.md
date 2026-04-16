@@ -18,11 +18,16 @@ Use these instead:
   Canonical `openstudio::model` HVAC topology concepts and patterns.
 - `idd_mapping.generated.md`
   Machine-generated OpenStudio IDD to EnergyPlus IDD inventory with translator evidence.
+- `idd_mapping_categories.generated.md`
+  Machine-generated organizational view of OS IDD types, grouped by direct base
+  class and heuristic subcategories.
 - `os_idd_object_relationships.md`
   HVAC-focused object-list relationship inventory derived from
   `OpenStudio.idd`.
 - `InputOutputReference.pdf`
   EnergyPlus field-semantics reference.
+- `scripts/generate_idd_mapping_categories.py`
+  Regenerates `idd_mapping_categories.generated.md`.
 - `scripts/generate_os_idd_object_relationships.py`
   Regenerates `os_idd_object_relationships.md`.
 
