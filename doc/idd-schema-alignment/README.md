@@ -9,8 +9,8 @@ Use these instead:
 
 - `src/epmodel/README.md` for durable epmodel architecture and behavior notes
 - `src/epmodel/AGENTS.md` for epmodel implementation guidance
-- `.opencode/hvac-parity-docs/hvac-api-roadmap.md` for active HVAC parity
-  status, queue order, and next steps
+- `.codex-local/campaigns/` for active campaign state, queue order, and next
+  steps
 
 ## Directory Index
 

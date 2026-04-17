@@ -10,6 +10,7 @@
 #include "EPModelFixture.hpp"
 #include "../Loop/AirLoopHVAC.hpp"
 #include "../Loop/PlantLoop.hpp"
+#include "../ResourceObject/ScheduleTypeLimits.hpp"
 #include "../Schedule/Schedule.hpp"
 #include "../Schedule/Schedule_Impl.hpp"
 #include "../Schedule/ScheduleConstant.hpp"
@@ -27,7 +28,7 @@ TEST_F(EPModelFixture, DistrictCooling_DefaultConstructor) {
   EXPECT_FALSE(districtCooling.nameString().empty());
   EXPECT_TRUE(districtCooling.isNominalCapacityAutosized());
   EXPECT_FALSE(districtCooling.nominalCapacity());
-  EXPECT_EQ(model.alwaysOnDiscreteSchedule().handle(), districtCooling.capacityFractionSchedule().handle());
+  EXPECT_EQ(model.alwaysOnContinuousSchedule().handle(), districtCooling.capacityFractionSchedule().handle());
 
   auto capacityFractionSchedule =
     districtCooling.getModelObjectTarget<Schedule>(openstudio::DistrictCoolingFields::CapacityFractionScheduleName);
@@ -40,20 +41,30 @@ TEST_F(EPModelFixture, DistrictCooling_ScheduleAndScalarAccessors_RoundTrip) {
   DistrictCooling districtCooling(model);
 
   ScheduleConstant capacityFractionSchedule(model);
-  capacityFractionSchedule.setValue(0.5);
+  ASSERT_TRUE(capacityFractionSchedule.setValue(0.5));
+  ScheduleTypeLimits dimensionlessLimits(model);
+  ASSERT_TRUE(dimensionlessLimits.setUnitType("Dimensionless"));
+  ASSERT_TRUE(dimensionlessLimits.setNumericType("Continuous"));
+  ASSERT_TRUE(dimensionlessLimits.setLowerLimitValue(0.0));
+  ASSERT_TRUE(dimensionlessLimits.setUpperLimitValue(1.0));
+  ASSERT_TRUE(capacityFractionSchedule.setScheduleTypeLimits(dimensionlessLimits));
   EXPECT_TRUE(districtCooling.setCapacityFractionSchedule(capacityFractionSchedule));
   EXPECT_EQ(capacityFractionSchedule.handle(), districtCooling.capacityFractionSchedule().handle());
 
   auto storedSchedule = districtCooling.getModelObjectTarget<Schedule>(openstudio::DistrictCoolingFields::CapacityFractionScheduleName);
   ASSERT_TRUE(storedSchedule);
   EXPECT_EQ(capacityFractionSchedule.handle(), storedSchedule->handle());
+  ASSERT_TRUE(capacityFractionSchedule.scheduleTypeLimits());
+  auto numericType = capacityFractionSchedule.scheduleTypeLimits()->numericType();
+  ASSERT_TRUE(numericType);
+  EXPECT_EQ("Continuous", *numericType);
 
   EXPECT_TRUE(districtCooling.setNominalCapacity(12345.0));
   ASSERT_TRUE(districtCooling.nominalCapacity());
   EXPECT_DOUBLE_EQ(12345.0, districtCooling.nominalCapacity().get());
   EXPECT_FALSE(districtCooling.isNominalCapacityAutosized());
 
-  auto districtCoolingCloneObject = model.addObject(districtCooling.clone());
+  auto districtCoolingCloneObject = model.addObject(districtCooling.idfObject());
   ASSERT_TRUE(districtCoolingCloneObject);
   auto districtCoolingClone = districtCoolingCloneObject->cast<DistrictCooling>();
   EXPECT_EQ(capacityFractionSchedule.handle(), districtCoolingClone.capacityFractionSchedule().handle());
@@ -66,6 +77,39 @@ TEST_F(EPModelFixture, DistrictCooling_ScheduleAndScalarAccessors_RoundTrip) {
   EXPECT_FALSE(districtCooling.nominalCapacity());
 
   EXPECT_FALSE(districtCooling.autosizedNominalCapacity());
+}
+
+TEST_F(EPModelFixture, DistrictCooling_ScheduleRelationship_RejectsIncompatibleScheduleTypeLimits) {
+  Model model;
+  DistrictCooling districtCooling(model);
+
+  ScheduleConstant wrongSchedule(model);
+  ASSERT_TRUE(wrongSchedule.setValue(22.0));
+  ScheduleTypeLimits temperatureLimits(model);
+  ASSERT_TRUE(temperatureLimits.setUnitType("Temperature"));
+  ASSERT_TRUE(wrongSchedule.setScheduleTypeLimits(temperatureLimits));
+
+  const auto originalSchedule = districtCooling.capacityFractionSchedule();
+  EXPECT_FALSE(districtCooling.setCapacityFractionSchedule(wrongSchedule));
+  EXPECT_EQ(originalSchedule.cast<ModelObject>(), districtCooling.capacityFractionSchedule().cast<ModelObject>());
+}
+
+TEST_F(EPModelFixture, DistrictCooling_ScheduleRelationship_RejectsDiscreteScheduleTypeLimits) {
+  Model model;
+  DistrictCooling districtCooling(model);
+
+  ScheduleConstant wrongSchedule(model);
+  ASSERT_TRUE(wrongSchedule.setValue(1.0));
+  ScheduleTypeLimits discreteLimits(model);
+  ASSERT_TRUE(discreteLimits.setUnitType("Dimensionless"));
+  ASSERT_TRUE(discreteLimits.setNumericType("Discrete"));
+  ASSERT_TRUE(discreteLimits.setLowerLimitValue(0.0));
+  ASSERT_TRUE(discreteLimits.setUpperLimitValue(1.0));
+  ASSERT_TRUE(wrongSchedule.setScheduleTypeLimits(discreteLimits));
+
+  const auto originalSchedule = districtCooling.capacityFractionSchedule();
+  EXPECT_FALSE(districtCooling.setCapacityFractionSchedule(wrongSchedule));
+  EXPECT_EQ(originalSchedule.cast<ModelObject>(), districtCooling.capacityFractionSchedule().cast<ModelObject>());
 }
 
 TEST_F(EPModelFixture, DistrictCooling_AddToNode_PlantSupplyOnly) {
@@ -101,17 +145,20 @@ TEST_F(EPModelFixture, DistrictCooling_AddToNode_PlantSupplyOnly) {
   EXPECT_FALSE(districtCooling.addToNode(demandOutletNode));
   EXPECT_EQ(5u, plantLoop.demandComponents().size());
 
-  districtCooling.disconnect();
-  EXPECT_FALSE(districtCooling.loop());
-  EXPECT_FALSE(districtCooling.inletModelObject());
-  EXPECT_FALSE(districtCooling.outletModelObject());
-
-  auto districtCoolingCloneObject = model.addObject(districtCooling.clone());
+  auto districtCoolingCloneObject = model.addObject(districtCooling.idfObject());
   ASSERT_TRUE(districtCoolingCloneObject);
   auto districtCoolingClone = districtCoolingCloneObject->cast<DistrictCooling>();
   supplyOutletNode = plantLoop.supplyOutletNode();
   EXPECT_TRUE(districtCoolingClone.addToNode(supplyOutletNode));
   EXPECT_EQ(9u, plantLoop.supplyComponents().size());
+  ASSERT_TRUE(districtCoolingClone.inletModelObject());
+  ASSERT_TRUE(districtCoolingClone.outletModelObject());
+
+  districtCooling.disconnect();
+  EXPECT_FALSE(districtCooling.loop());
+  EXPECT_FALSE(districtCooling.inletModelObject());
+  EXPECT_FALSE(districtCooling.outletModelObject());
+  ASSERT_TRUE(districtCoolingClone.loop());
   ASSERT_TRUE(districtCoolingClone.inletModelObject());
   ASSERT_TRUE(districtCoolingClone.outletModelObject());
 }

@@ -23,7 +23,7 @@ namespace epmodel {
   DistrictCooling::DistrictCooling(const Model& model) : StraightComponent(DistrictCooling::iddObjectType(), model) {
     autosizeNominalCapacity();
 
-    auto capacityFractionSchedule = model.alwaysOnDiscreteSchedule();
+    auto capacityFractionSchedule = model.alwaysOnContinuousSchedule();
     OS_ASSERT(getImpl<detail::DistrictCooling_Impl>()->setCapacityFractionSchedule(capacityFractionSchedule));
   }
 

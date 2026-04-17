@@ -343,6 +343,34 @@ In practice:
   canonicalized EnergyPlus topology, and role-specific helpers should be
   preferred when role-specific behavior matters
 
+That does not mean every `StraightComponent` is freely insertable everywhere a
+straight-through port pair exists. Some canonical wrappers deliberately narrow
+placement to one loop role. `WaterUseConnections`, `RefrigerationCondenserWaterCooled`,
+`RefrigerationCompressorRack`, and `SwimmingPoolIndoor` are the clearest
+current plant-demand-only examples in this category: despite inheriting the
+generic straight-component shape, canonical `openstudio::model` and epmodel
+only allow them on plant loop demand nodes because they represent demand-side
+water-use, refrigeration-rack condenser-water, refrigeration-condenser, and
+pool-heating subsystems rather than
+general-purpose air or plant inline components. For `RefrigerationCompressorRack`, the condenser schedule helpers rely on the shared epmodel schedule-type registry rather than wrapper-local validation alone, and the same-loop plant-demand reattach path is now covered explicitly in the entity test suite. For `SwimmingPoolIndoor`, that
+placement parity is only one slice of the story: epmodel still intentionally
+omits the canonical surface and schedule relationship helpers and currently
+retains extra cover-factor default/reset conveniences that are documented as
+wrapper-local behavior rather than canonical parity. `HeatPumpAirToWater` is a
+different restricted case: the wrapper itself is non-insertable, and canonical
+loop attachment happens through the underlying heating and cooling
+operation-mode objects instead.
+`PlantComponentUserDefined` is another special case in a different direction:
+its canonical `openstudio::model` wrapper is still a one-connection
+`StraightComponent`, but the EnergyPlus-backed epmodel wrapper also preserves
+the persisted Number of Plant Loop Connections field and Plant Connection 2-4
+loading and flow-request scalar fields as direct pass-through accessors while
+still enforcing the canonical one-connection write contract and intentionally
+omitting the canonical EMS, actuator, and ambient-zone companion-object
+surface. Canonical `openstudio::model` also bootstraps those EMS companion
+objects in its constructor; epmodel intentionally stops at the persisted
+EnergyPlus scalar defaults for Plant Connection 1.
+
 The guiding principle is that these traversal APIs should reflect the
 canonicalized topology accurately and consistently. That may carry performance
 implications in some cases, but those should be addressed as needed through
@@ -369,6 +397,15 @@ This pattern is not universal. Radiant families are the clearest
 counterexample: they are more relationship-driven, and epmodel may use
 transient child wrappers or companion-object views to preserve the canonical
 object shape without pretending EnergyPlus persisted separate child objects.
+`GroundHeatExchangerVertical` is a related persisted-storage case: the
+canonical straight-component wrapper is backed by a
+`GroundHeatExchanger:ResponseFactors` object plus linked
+`GroundHeatExchanger:System` and `GroundHeatExchanger:Vertical:Properties`
+companions, and plant-loop traversal projects the stored system branch row
+back to the wrapper callers attached to the loop. The current epmodel parity
+slice still intentionally omits the canonical `groundTemperature()` and
+`maximumLengthofSimulation()` helpers because the EnergyPlus-backed storage
+does not expose direct persisted fields for that OpenStudio-only state.
 
 ## Current Status
 
@@ -463,6 +500,9 @@ water-heater families.
 Much of the core water-to-air surface appears to be in place already. What may
 still require an active cleanup pass is:
 
+- `HeatPumpAirToWater` now covers the wrapper-level operating-mode schedule, air-node-name, and direct curve-reference helpers, but the wrapper itself remains non-insertable and epmodel still lacks the canonical heating/cooling operation-mode child wrappers that own plant-loop placement.
+- `HeatPumpAirToWaterFuelFiredCooling` now covers the canonical companion-heating link and direct required/optional curve-reference helpers, and it stays plant-supply-only like the canonical straight-component wrapper; the remaining documented delta is the omitted air-source-node helper for the translator-emitted `OutdoorAir:Node` companion object.
+- `HeatPumpAirToWaterFuelFiredHeating` now matches the same heating-side parity slice: canonical default curves and explicit-curve constructor, companion-cooling and optional curve-reference helpers, and plant-supply-only placement are all preserved; the remaining documented delta is again the omitted air-source-node helper for the translator-emitted `OutdoorAir:Node` companion object.
 - performance curves
 - schedules and control relationships
 - speed, stage, and performance-data APIs
